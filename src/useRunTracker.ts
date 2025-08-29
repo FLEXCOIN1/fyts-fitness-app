@@ -1,64 +1,237 @@
-To prevent your running app from registering movement when you are stationary, you need to filter the raw GPS data. GPS signals often have small, natural variations (known as "GPS drift" or "spidering"), even when a device is not moving. The key is to implement logic that ignores small, insignificant changes in location. 
+import { useState, useRef, useEffect } from 'react';
 
-Here is the filtering logic you can implement in your app, using pseudocode as an example. 
+export type GPSSample = {
+  lat: number;
+  lon: number;
+  t: number;
+};
 
-1. Set a minimum movement threshold
+export type RunState = 'idle' | 'running' | 'paused' | 'ended' | 'stationary';
 
-The most direct way to filter out stationary movement is to set a minimum distance threshold. Your app should only register new movement if the user has traveled a certain distance since the last recorded location point.
+export type RunStats = {
+  distanceMeters: number;
+  elapsedMs: number;
+  avgPace: number;
+  samples: GPSSample[];
+};
 
-Logic:
+// Calculate distance between two GPS points using Haversine formula
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371e3; // Earth's radius in meters
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
 
-Store the last recorded valid location, $last\_location.
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+          Math.cos(φ1) * Math.cos(φ2) *
+          Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
-When a new GPS location update, $current\_location, is received, calculate the distance between $last\_location and $current\_location.
-
-If this distance is greater than your predefined threshold (e.g., 5–10 meters), then it is considered a valid movement. Update your total distance and set $last\_location to $current\_location.
-
-If the distance is below the threshold, ignore the update and do not change $last\_location.
-
-Pseudocode:
-
-// Initialize variables
-$last_location = null;
-$total_distance = 0;
-$distance_threshold = 7; // Example: 7 meters
-
-// Location update function
-function onLocationUpdate($current_location) {
-    // Check if a previous location exists
-    if ($last_location != null) {
-        // Calculate distance between current and last location
-        $distance = calculateDistance($last_location, $current_location);
-
-        // Filter out GPS drift
-        if ($distance > $distance_threshold) {
-            $total_distance += $distance;
-            $last_location = $current_location;
-            // Add new location to the map path
-            recordLocation($current_location);
-        }
-    } else {
-        // First location point, just record it
-        $last_location = $current_location;
-        recordLocation($current_location);
-    }
+  return R * c;
 }
 
+// Format time as MM:SS
+function formatTime(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
 
-Tip: Adjusting the threshold value allows you to fine-tune the app's sensitivity. For more accurate pace calculations, a stricter threshold (e.g., 5 meters) may be appropriate. 
+// Format distance as X.XX km or XXX m
+function formatDistance(meters: number): string {
+  if (meters >= 1000) {
+    return `${(meters / 1000).toFixed(2)} km`;
+  }
+  return `${Math.round(meters)} m`;
+}
 
-2. Implement a timer to detect "stillness"
+// Calculate pace as min/km
+function calculatePace(distanceMeters: number, elapsedMs: number): string {
+  if (distanceMeters < 100 || elapsedMs < 30000) return "--:--";
+  
+  const distanceKm = distanceMeters / 1000;
+  const elapsedMinutes = elapsedMs / 60000;
+  const paceMinutesPerKm = elapsedMinutes / distanceKm;
+  
+  const minutes = Math.floor(paceMinutesPerKm);
+  const seconds = Math.round((paceMinutesPerKm - minutes) * 60);
+  
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
 
-For more robust filtering, you can combine the distance threshold with a timer. If no significant movement has occurred for a set period, your app can pause tracking until a new, valid movement is detected. This also helps save battery life. 
+export function useRunTracker() {
+  const [state, setState] = useState<RunState>('idle');
+  const [stats, setStats] = useState<RunStats>({
+    distanceMeters: 0,
+    elapsedMs: 0,
+    avgPace: 0,
+    samples: []
+  });
 
-Logic:
+  const watchIdRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number>(0);
+  const intervalRef = useRef<number | null>(null);
+  
+  // GPS filtering variables
+  const lastValidLocationRef = useRef<GPSSample | null>(null);
+  const lastMovementTimeRef = useRef<number>(0);
+  const DISTANCE_THRESHOLD = 7; // 7 meters minimum movement
+  const STATIONARY_TIMEOUT = 60000; // 60 seconds without movement = stationary
+  const STATIONARY_THRESHOLD = 15; // 15 meters needed to resume from stationary
 
-Start a timer or record a timestamp when the last valid movement was logged.
+  // Update elapsed time every second when running
+  useEffect(() => {
+    if (state === 'running' || state === 'stationary') {
+      intervalRef.current = window.setInterval(() => {
+        const elapsed = Date.now() - startTimeRef.current;
+        setStats(prev => ({ ...prev, elapsedMs: elapsed }));
+        
+        // Check for stationary timeout
+        if (state === 'running' && lastMovementTimeRef.current > 0) {
+          const timeSinceLastMovement = Date.now() - lastMovementTimeRef.current;
+          if (timeSinceLastMovement > STATIONARY_TIMEOUT) {
+            console.log('Detected stationary - switching to stationary mode');
+            setState('stationary');
+          }
+        }
+      }, 1000);
+    } else {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    }
 
-If the timer exceeds a certain duration (e.g., 60 seconds) without a new, valid location update, transition the app to a "stationary" mode.
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [state]);
 
-In stationary mode, increase the distance threshold to filter out any lingering drift. Resume normal tracking only when a large-enough, legitimate movement is detected.
+  const onLocationUpdate = (position: GeolocationPosition) => {
+    const currentLocation: GPSSample = {
+      lat: position.coords.latitude,
+      lon: position.coords.longitude,
+      t: Date.now()
+    };
 
-3. Consider using platform-specific APIs
+    console.log('GPS update:', currentLocation.lat, currentLocation.lon);
 
-For apps targeting a specific platform, using built-in, pre-optimized APIs is a good practice. They are often more efficient and reliable than custom-built solutions. 
+    if (lastValidLocationRef.current === null) {
+      // First location point - just record it
+      lastValidLocationRef.current = currentLocation;
+      lastMovementTimeRef.current = Date.now();
+      setStats(prev => ({
+        ...prev,
+        samples: [currentLocation]
+      }));
+      return;
+    }
+
+    // Calculate distance from last valid location
+    const distance = calculateDistance(
+      lastValidLocationRef.current.lat,
+      lastValidLocationRef.current.lon,
+      currentLocation.lat,
+      currentLocation.lon
+    );
+
+    console.log(`Distance from last valid location: ${distance.toFixed(1)}m`);
+
+    // Determine threshold based on current state
+    const threshold = state === 'stationary' ? STATIONARY_THRESHOLD : DISTANCE_THRESHOLD;
+
+    // Filter out GPS drift
+    if (distance > threshold) {
+      console.log(`Valid movement detected (${distance.toFixed(1)}m > ${threshold}m)`);
+      
+      // Valid movement - update distance and location
+      setStats(prev => ({
+        ...prev,
+        distanceMeters: prev.distanceMeters + distance,
+        samples: [...prev.samples, currentLocation]
+      }));
+
+      lastValidLocationRef.current = currentLocation;
+      lastMovementTimeRef.current = Date.now();
+
+      // Resume from stationary if needed
+      if (state === 'stationary') {
+        console.log('Resuming from stationary mode');
+        setState('running');
+      }
+    } else {
+      console.log(`GPS drift filtered out (${distance.toFixed(1)}m < ${threshold}m)`);
+    }
+  };
+
+  const start = async () => {
+    setState('running');
+    startTimeRef.current = Date.now();
+    lastMovementTimeRef.current = Date.now();
+    console.log('GPS tracking started with filtering!');
+    
+    if (navigator.geolocation) {
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        onLocationUpdate,
+        (error) => console.error('GPS Error:', error),
+        { 
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 5000
+        }
+      );
+    }
+  };
+
+  const pause = () => {
+    setState('paused');
+    if (watchIdRef.current) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+  };
+
+  const resume = () => {
+    setState('running');
+    lastMovementTimeRef.current = Date.now();
+    start();
+  };
+
+  const end = () => {
+    setState('ended');
+    if (watchIdRef.current) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+  };
+
+  const discard = () => {
+    setState('idle');
+    setStats({ distanceMeters: 0, elapsedMs: 0, avgPace: 0, samples: [] });
+    startTimeRef.current = 0;
+    lastValidLocationRef.current = null;
+    lastMovementTimeRef.current = 0;
+  };
+
+  // Format stats for display
+  const formattedStats = {
+    distance: formatDistance(stats.distanceMeters),
+    duration: formatTime(stats.elapsedMs),
+    pace: calculatePace(stats.distanceMeters, stats.elapsedMs)
+  };
+
+  return { 
+    state, 
+    stats, 
+    formattedStats,
+    start, 
+    pause, 
+    resume,
+    end, 
+    discard 
+  };
+}
