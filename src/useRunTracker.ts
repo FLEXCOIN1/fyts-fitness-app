@@ -249,28 +249,30 @@ function formatTime(ms: number): string {
 }
 
 function formatDistance(meters: number): string {
-  if (meters >= 1000) {
-    return `${(meters / 1000).toFixed(2)} km`;
+  const miles = meters * 0.000621371;
+  if (miles >= 1) {
+    return `${miles.toFixed(2)} mi`;
   }
-  return `${Math.round(meters)} m`;
+  const feet = meters * 3.28084;
+  return `${Math.round(feet)} ft`;
 }
 
 function formatPace(distanceMeters: number, elapsedMs: number): string {
-  if (distanceMeters < 50 || elapsedMs < 20000) return "--:--"; // More realistic minimums
+  if (distanceMeters < 50 || elapsedMs < 20000) return "--:--";
   
-  const distanceKm = distanceMeters / 1000;
+  const distanceMiles = distanceMeters * 0.000621371;
   const elapsedMinutes = elapsedMs / 60000;
-  const paceMinutesPerKm = elapsedMinutes / distanceKm;
+  const paceMinutesPerMile = elapsedMinutes / distanceMiles;
   
-  const minutes = Math.floor(paceMinutesPerKm);
-  const seconds = Math.round((paceMinutesPerKm - minutes) * 60);
+  const minutes = Math.floor(paceMinutesPerMile);
+  const seconds = Math.round((paceMinutesPerMile - minutes) * 60);
   
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
 function formatSpeed(metersPerSecond: number): string {
-  const kmh = metersPerSecond * 3.6;
-  return `${kmh.toFixed(1)} km/h`;
+  const mph = metersPerSecond * 2.23694;
+  return `${mph.toFixed(1)} mph`;
 }
 
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
