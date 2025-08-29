@@ -18,13 +18,13 @@ export type RunStats = {
   filteredSamples: GPSSample[];
 };
 
-// Professional Kalman Filter for GPS
+// Professional Kalman Filter optimized for smartphone GPS
 class GPSKalmanFilter {
   private lat: number = 0;
   private lon: number = 0;
   private variance: number = -1;
-  private readonly minAccuracy: number = 1;
-  private readonly Q: number = 3;
+  private readonly minAccuracy: number = 2; // 2 meters minimum (realistic for phones)
+  private readonly Q: number = 1; // Reduced process noise for walking speeds
   private lastTimeStamp: number = 0;
 
   public process(lat: number, lon: number, accuracy: number, timeStampMs: number): GPSSample {
@@ -58,18 +58,20 @@ class GPSKalmanFilter {
   }
 }
 
-// Movement analyzer with bad data filtering
+// Movement analyzer optimized for smartphone GPS accuracy
 class MovementAnalyzer {
   private history: GPSSample[] = [];
-  private readonly maxHistory = 10;
-  private readonly SPEED_THRESHOLD = 0.5;
-  private readonly ACCURACY_THRESHOLD = 20;
-  private readonly MAX_REASONABLE_SPEED = 15;
-  private readonly MIN_TIME_DIFF = 0.5;
+  private readonly maxHistory = 8; // Reduced for faster response
+  private readonly SPEED_THRESHOLD = 0.3; // Lower threshold (1.08 km/h)
+  private readonly ACCURACY_THRESHOLD = 50; // More realistic for phones (was 20m)
+  private readonly MAX_REASONABLE_SPEED = 20; // Higher for brief GPS errors
+  private readonly MIN_TIME_DIFF = 0.8; // Slightly longer intervals
+  private readonly GPS_DRIFT_RADIUS = 8; // Ignore movements within 8m radius when stationary
   
   public addSample(sample: GPSSample): boolean {
+    // Filter 1: Reject extremely poor accuracy readings
     if (sample.accuracy > this.ACCURACY_THRESHOLD) {
-      console.log(`REJECTED: Poor accuracy ${sample.accuracy.toFixed(1)}m`);
+      console.log(`REJECTED: Poor accuracy ${sample.accuracy.toFixed(1)}m (threshold: ${this.ACCURACY_THRESHOLD}m)`);
       return false;
     }
     
@@ -77,26 +79,25 @@ class MovementAnalyzer {
       const lastSample = this.history[this.history.length - 1];
       const timeDiff = (sample.t - lastSample.t) / 1000;
       
+      // Filter 2: Minimum time between readings
       if (timeDiff < this.MIN_TIME_DIFF) {
-        console.log(`REJECTED: Too frequent (${timeDiff.toFixed(1)}s)`);
+        console.log(`REJECTED: Too frequent (${timeDiff.toFixed(1)}s < ${this.MIN_TIME_DIFF}s)`);
         return false;
       }
       
       const distance = this.calculateDistance(lastSample.lat, lastSample.lon, sample.lat, sample.lon);
       const speed = distance / timeDiff;
       
+      // Filter 3: Impossible speed detection (more lenient)
       if (speed > this.MAX_REASONABLE_SPEED) {
         console.log(`REJECTED: Impossible speed ${speed.toFixed(1)}m/s (${(speed * 3.6).toFixed(1)} km/h)`);
         return false;
       }
       
+      // Filter 4: Advanced GPS bounce detection - more sophisticated
       if (this.history.length >= 3) {
-        const prevPrev = this.history[this.history.length - 2];
-        const distanceToPrevPrev = this.calculateDistance(prevPrev.lat, prevPrev.lon, sample.lat, sample.lon);
-        const distanceToLast = distance;
-        
-        if (distanceToPrevPrev < distanceToLast && distanceToLast < 10 && distanceToPrevPrev < 8) {
-          console.log(`REJECTED: GPS bounce detected`);
+        if (this.isGPSBounce(sample)) {
+          console.log(`REJECTED: GPS bounce pattern detected`);
           return false;
         }
       }
@@ -107,13 +108,56 @@ class MovementAnalyzer {
       this.history.shift();
     }
     
-    console.log(`ACCEPTED: GPS reading with accuracy ${sample.accuracy.toFixed(1)}m`);
+    console.log(`ACCEPTED: GPS reading (${sample.accuracy.toFixed(1)}m accuracy)`);
     return true;
+  }
+  
+  // Sophisticated GPS bounce detection
+  private isGPSBounce(sample: GPSSample): boolean {
+    const len = this.history.length;
+    if (len < 3) return false;
+    
+    const current = sample;
+    const last = this.history[len - 1];
+    const prevPrev = this.history[len - 2];
+    const prevPrevPrev = this.history[len - 3] || null;
+    
+    // Calculate distances in the chain
+    const distLastToCurrent = this.calculateDistance(last.lat, last.lon, current.lat, current.lon);
+    const distPrevPrevToCurrent = this.calculateDistance(prevPrev.lat, prevPrev.lon, current.lat, current.lon);
+    const distPrevPrevToLast = this.calculateDistance(prevPrev.lat, prevPrev.lon, last.lat, last.lon);
+    
+    // Pattern 1: Oscillation detection - current point closer to older point than recent point
+    if (distPrevPrevToCurrent < distLastToCurrent && 
+        distLastToCurrent > 15 && 
+        distPrevPrevToCurrent < 10) {
+      return true;
+    }
+    
+    // Pattern 2: Triangle pattern detection for small movements
+    if (distLastToCurrent < 5 && distPrevPrevToLast < 5 && distPrevPrevToCurrent < 5) {
+      // All points very close - likely stationary drift
+      return true;
+    }
+    
+    // Pattern 3: Sharp direction changes with small distances
+    if (prevPrevPrev) {
+      const totalDistance = distPrevPrevToLast + distLastToCurrent;
+      const directDistance = this.calculateDistance(prevPrev.lat, prevPrev.lon, current.lat, current.lon);
+      
+      // If we traveled in a zigzag when we could have gone direct
+      if (totalDistance > directDistance * 2 && directDistance < 12) {
+        return true;
+      }
+    }
+    
+    return false;
   }
   
   public isMoving(): boolean {
     if (this.history.length < 3) return false;
     
+    // Method 1: Velocity-based analysis (primary)
     const velocities: number[] = [];
     for (let i = 1; i < this.history.length; i++) {
       const prev = this.history[i - 1];
@@ -128,11 +172,30 @@ class MovementAnalyzer {
     
     if (velocities.length === 0) return false;
     
+    // Use 75th percentile instead of median for more responsive detection
     velocities.sort((a, b) => a - b);
-    const medianVelocity = velocities[Math.floor(velocities.length / 2)];
+    const percentile75 = velocities[Math.floor(velocities.length * 0.75)];
+    const velocityMoving = percentile75 > this.SPEED_THRESHOLD;
     
-    const isMoving = medianVelocity > this.SPEED_THRESHOLD;
-    console.log(`Movement analysis - Median velocity: ${medianVelocity.toFixed(2)}m/s, Moving: ${isMoving}`);
+    // Method 2: Displacement analysis (secondary confirmation)
+    const firstPoint = this.history[0];
+    const lastPoint = this.history[this.history.length - 1];
+    const totalDisplacement = this.calculateDistance(
+      firstPoint.lat, firstPoint.lon,
+      lastPoint.lat, lastPoint.lon
+    );
+    const timeSpan = (lastPoint.t - firstPoint.t) / 1000;
+    const displacementBased = totalDisplacement > this.GPS_DRIFT_RADIUS && timeSpan > 3;
+    
+    // Combine both methods - more lenient for actual movement
+    const isMoving = velocityMoving || displacementBased;
+    
+    console.log(`Movement analysis:
+      - 75th percentile velocity: ${percentile75.toFixed(2)}m/s
+      - Total displacement: ${totalDisplacement.toFixed(1)}m over ${timeSpan.toFixed(1)}s
+      - Velocity-based moving: ${velocityMoving}
+      - Displacement-based moving: ${displacementBased}
+      - Final decision: ${isMoving ? 'MOVING' : 'STATIONARY'}`);
     
     return isMoving;
   }
@@ -140,7 +203,8 @@ class MovementAnalyzer {
   public getCurrentSpeed(): number {
     if (this.history.length < 2) return 0;
     
-    const recent = this.history.slice(-3);
+    // Use more data points for smoother speed calculation
+    const recent = this.history.slice(-4); // Last 4 points
     const velocities: number[] = [];
     
     for (let i = 1; i < recent.length; i++) {
@@ -156,7 +220,9 @@ class MovementAnalyzer {
     
     if (velocities.length === 0) return 0;
     
-    return velocities.reduce((sum, v) => sum + v, 0) / velocities.length;
+    // Use median of recent velocities for stability
+    velocities.sort((a, b) => a - b);
+    return velocities[Math.floor(velocities.length / 2)];
   }
   
   private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -190,7 +256,7 @@ function formatDistance(meters: number): string {
 }
 
 function formatPace(distanceMeters: number, elapsedMs: number): string {
-  if (distanceMeters < 100 || elapsedMs < 30000) return "--:--";
+  if (distanceMeters < 50 || elapsedMs < 20000) return "--:--"; // More realistic minimums
   
   const distanceKm = distanceMeters / 1000;
   const elapsedMinutes = elapsedMs / 60000;
@@ -242,7 +308,7 @@ export function useRunTracker() {
   const stationaryCheckTimeRef = useRef<number>(0);
   const currentSpeedRef = useRef<number>(0);
   
-  const STATIONARY_TIMEOUT = 30000;
+  const STATIONARY_TIMEOUT = 45000; // 45 seconds - longer for smartphone GPS
 
   useEffect(() => {
     if (state === 'running' || state === 'stationary') {
@@ -256,16 +322,17 @@ export function useRunTracker() {
         if (state === 'running' && !movementAnalyzerRef.current.isMoving()) {
           if (stationaryCheckTimeRef.current === 0) {
             stationaryCheckTimeRef.current = Date.now();
+            console.log('Starting stationary timer...');
           } else if (Date.now() - stationaryCheckTimeRef.current > STATIONARY_TIMEOUT) {
-            console.log('Transitioning to stationary mode');
+            console.log('Transitioning to stationary mode after 45s');
             setState('stationary');
           }
         } else if (state === 'stationary' && movementAnalyzerRef.current.isMoving()) {
-          console.log('Movement detected - resuming tracking');
+          console.log('Movement detected - resuming active tracking');
           setState('running');
           stationaryCheckTimeRef.current = 0;
         } else if (state === 'running' && movementAnalyzerRef.current.isMoving()) {
-          stationaryCheckTimeRef.current = 0;
+          stationaryCheckTimeRef.current = 0; // Reset timer
         }
       }, 1000);
     } else {
@@ -300,7 +367,7 @@ export function useRunTracker() {
       rawSample.t
     );
 
-    console.log(`Filtered GPS: ${filteredSample.lat.toFixed(6)}, ${filteredSample.lon.toFixed(6)}, accuracy: ${filteredSample.accuracy.toFixed(1)}m`);
+    console.log(`Kalman filtered: ${filteredSample.lat.toFixed(6)}, ${filteredSample.lon.toFixed(6)}`);
 
     const validSample = movementAnalyzerRef.current.addSample(filteredSample);
     if (!validSample) return;
@@ -314,10 +381,17 @@ export function useRunTracker() {
         filteredSample.lon
       );
       
-      if (distance > 2) {
+      // More lenient distance accumulation threshold
+      if (distance > 1.5) { // Reduced from 2m to 1.5m
         addedDistance = distance;
-        console.log(`Distance added: ${distance.toFixed(1)}m`);
+        console.log(`✅ Distance added: ${distance.toFixed(1)}m (total: ${(stats.distanceMeters + distance).toFixed(1)}m)`);
+      } else {
+        console.log(`⏸️ Distance too small: ${distance.toFixed(1)}m (threshold: 1.5m)`);
       }
+    } else if (!movementAnalyzerRef.current.isMoving()) {
+      console.log(`🛑 No distance added - not moving`);
+    } else {
+      console.log(`📍 First position logged`);
     }
 
     lastValidPositionRef.current = filteredSample;
@@ -334,7 +408,7 @@ export function useRunTracker() {
     setState('running');
     startTimeRef.current = Date.now();
     stationaryCheckTimeRef.current = 0;
-    console.log('Professional GPS tracking started with Kalman filtering and bad data rejection!');
+    console.log('🏃 Professional GPS tracking started - optimized for smartphone hardware!');
     
     if (navigator.geolocation) {
       watchIdRef.current = navigator.geolocation.watchPosition(
@@ -342,8 +416,8 @@ export function useRunTracker() {
         (error) => console.error('GPS Error:', error),
         { 
           enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 1000
+          timeout: 15000, // Longer timeout for phones
+          maximumAge: 2000 // Slightly older readings OK
         }
       );
     }
