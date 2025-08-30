@@ -56,7 +56,7 @@ export default function App() {
   const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
+    let interval: number | null = null;
     if (state === 'running' || state === 'stationary') {
       interval = setInterval(() => {
         setCurrentQuoteIndex((prevIndex) => 
