@@ -67,10 +67,28 @@
   margin: 0;
 }
 
-.app-subtitle {
-  color: #9ca3af;
-  margin: 0.5rem 0 0;
-  font-size: 1.125rem;
+.motivation-container {
+  padding: 0 1.5rem 1.5rem;
+  position: relative;
+  z-index: 10;
+}
+
+.motivation-quote {
+  background: rgba(255, 215, 0, 0.1);
+  backdrop-filter: blur(16px);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  text-align: center;
+  color: #fbbf24;
+  font-style: italic;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  animation: slideIn 1s ease-in-out;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .status-container {
@@ -168,21 +186,14 @@
 }
 
 .distance-value {
-  font-size: 4.5rem;
-  font-weight: 900;
+  font-size: 1.5rem;
+  font-weight: 700;
   background: linear-gradient(135deg, #10b981, #059669);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   letter-spacing: -0.05em;
   line-height: 1;
-  margin-bottom: 0.25rem;
-}
-
-.distance-unit {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #6ee7b7;
   margin-bottom: 0.25rem;
 }
 
@@ -406,5 +417,16 @@
   }
   50% {
     opacity: .5;
+  }
+}
+
+@keyframes slideIn {
+  from { 
+    opacity: 0; 
+    transform: translateY(20px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0); 
   }
 }
