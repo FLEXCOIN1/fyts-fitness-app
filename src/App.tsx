@@ -56,7 +56,7 @@ export default function App() {
   const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
 
   useEffect(() => {
-    let interval;
+    let interval: NodeJS.Timeout | null = null;
     if (state === 'running' || state === 'stationary') {
       interval = setInterval(() => {
         setCurrentQuoteIndex((prevIndex) => 
@@ -69,7 +69,7 @@ export default function App() {
     };
   }, [state]);
 
-  const formatDistanceWithBoth = (meters) => {
+  const formatDistanceWithBoth = (meters: number): string => {
     const km = (meters / 1000).toFixed(2);
     const miles = (meters * 0.000621371).toFixed(2);
     
