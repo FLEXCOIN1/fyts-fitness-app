@@ -1,14 +1,15 @@
-export const CONTRACT_ADDRESS = "0x..."; // Add your deployed contract address here
-export const CONTRACT_ABI = [...]; // Add the ABI from Remix here
+export const CONTRACT_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-// Contract functions we'll use
-export const CONTRACT_FUNCTIONS = {
-  // User functions
-  submitValidation: "submitValidation",
-  balanceOf: "balanceOf",
-  
-  // Admin functions
-  approveValidator: "approveValidator",
-  approveValidation: "approveValidation",
-  getPendingValidations: "getPendingValidations",
-};
+export const CONTRACT_ABI = [
+  {
+    "inputs": [
+      {"internalType": "uint256", "name": "distance", "type": "uint256"},
+      {"internalType": "uint256", "name": "duration", "type": "uint256"},
+      {"internalType": "string", "name": "proofURI", "type": "string"}
+    ],
+    "name": "submitValidation",
+    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+];
