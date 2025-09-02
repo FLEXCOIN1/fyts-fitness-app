@@ -109,10 +109,15 @@ class MockEarningSystem {
       user: this.ownerAddress,
     });
     
-    // Generate mock transaction hash
-    const mockTxHash = '0x' + Buffer.from(
-      `${userAddress}-${distance}-${duration}-${Date.now()}`
-    ).toString('hex').slice(0, 64);
+    // Generate mock transaction hash without using Buffer (browser-compatible)
+    const hashSource = `${userAddress}-${distance}-${duration}-${Date.now()}`;
+    let hash = 0;
+    for (let i = 0; i < hashSource.length; i++) {
+      const char = hashSource.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    const mockTxHash = '0x' + Math.abs(hash).toString(16).padStart(64, '0');
     
     console.log('📊 Run Validated and Earnings Calculated:');
     console.log(`   User: ${userAddress}`);
