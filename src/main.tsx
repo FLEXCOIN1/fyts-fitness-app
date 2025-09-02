@@ -1,13 +1,11 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
+import React from 'react'
+import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
-import { Web3Provider } from './web3/providers.tsx'
+import './index.css'
+// import { Web3Provider } from './web3/providers.tsx'  // Commented out - file doesn't exist
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <Web3Provider>
-      <App />
-    </Web3Provider>
-  </StrictMode>,
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
 )
