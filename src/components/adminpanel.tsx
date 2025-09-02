@@ -1,6 +1,4 @@
-import React from 'react';
 import { useAccount } from 'wagmi';
-// import { useContract } from '../hooks/useContract';  // Commented out - file doesn't exist
 
 // Simple admin panel component
 export function AdminPanel() {
