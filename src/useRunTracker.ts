@@ -290,6 +290,39 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c;
 }
 
+const validateRun = (distance: number, duration: number, gpsPoints: GPSSample[]): boolean => {
+  // Must have actual distance and time
+  if (distance < 10 || duration < 60000) return false; // Minimum 10 meters, 1 minute
+  
+  // Check maximum human speed (4-minute mile = 6.7 m/s)
+  const avgSpeed = distance / (duration / 1000);
+  if (avgSpeed > 6.7) {
+    console.warn(`Run too fast: ${avgSpeed.toFixed(2)} m/s average speed`);
+    return false;
+  }
+  
+  // Must have enough GPS points (at least 1 every 30 seconds)
+  const expectedPoints = Math.floor(duration / 30000);
+  if (gpsPoints.length < expectedPoints) {
+    console.warn(`Not enough GPS points: ${gpsPoints.length} vs expected ${expectedPoints}`);
+    return false;
+  }
+  
+  // Check for impossible GPS jumps
+  for (let i = 1; i < gpsPoints.length; i++) {
+    const jump = calculateDistance(
+      gpsPoints[i-1].lat, gpsPoints[i-1].lon,
+      gpsPoints[i].lat, gpsPoints[i].lon
+    );
+    if (jump > 100) { // 100-meter jump between points
+      console.warn(`GPS jump detected: ${jump.toFixed(2)} meters`);
+      return false;
+    }
+  }
+  
+  return true;
+};
+
 export function useRunTracker() {
   const [state, setState] = useState<RunState>('idle');
   const [stats, setStats] = useState<RunStats>({
@@ -386,14 +419,14 @@ export function useRunTracker() {
       // More lenient distance accumulation threshold
       if (distance > 1.5) { // Reduced from 2m to 1.5m
         addedDistance = distance;
-        console.log(`✅ Distance added: ${distance.toFixed(1)}m (total: ${(stats.distanceMeters + distance).toFixed(1)}m)`);
+        console.log(`Distance added: ${distance.toFixed(1)}m (total: ${(stats.distanceMeters + distance).toFixed(1)}m)`);
       } else {
-        console.log(`⏸️ Distance too small: ${distance.toFixed(1)}m (threshold: 1.5m)`);
+        console.log(`Distance too small: ${distance.toFixed(1)}m (threshold: 1.5m)`);
       }
     } else if (!movementAnalyzerRef.current.isMoving()) {
-      console.log(`🛑 No distance added - not moving`);
+      console.log(`No distance added - not moving`);
     } else {
-      console.log(`📍 First position logged`);
+      console.log(`First position logged`);
     }
 
     lastValidPositionRef.current = filteredSample;
@@ -410,7 +443,7 @@ export function useRunTracker() {
     setState('running');
     startTimeRef.current = Date.now();
     stationaryCheckTimeRef.current = 0;
-    console.log('🏃 Professional GPS tracking started - optimized for smartphone hardware!');
+    console.log('Professional GPS tracking started - optimized for smartphone hardware!');
     
     if (navigator.geolocation) {
       watchIdRef.current = navigator.geolocation.watchPosition(
@@ -441,7 +474,17 @@ export function useRunTracker() {
   };
 
   const end = () => {
-    setState('ended');
+    // Validate the run before ending
+    const isValidRun = validateRun(stats.distanceMeters, stats.elapsedMs, stats.samples);
+    
+    if (!isValidRun) {
+      console.warn('Invalid run detected - no tokens will be awarded');
+      // Still end the run but mark as invalid
+      setState('ended');
+    } else {
+      setState('ended');
+    }
+    
     if (watchIdRef.current) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
@@ -450,19 +493,9 @@ export function useRunTracker() {
 
   const discard = () => {
     setState('idle');
-    setStats({ 
-      distanceMeters: 0, 
-      elapsedMs: 0, 
-      avgPace: 0, 
-      samples: [],
-      filteredSamples: []
-    });
+    setStats({ distanceMeters: 0, elapsedMs: 0, avgPace: 0, samples: [], filteredSamples: [] });
     startTimeRef.current = 0;
-    lastValidPositionRef.current = null;
     stationaryCheckTimeRef.current = 0;
-    
-    kalmanFilterRef.current = new GPSKalmanFilter();
-    movementAnalyzerRef.current = new MovementAnalyzer();
   };
 
   const formattedStats = {

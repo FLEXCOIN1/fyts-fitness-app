@@ -67,6 +67,222 @@
   margin: 0;
 }
 
+.protocol-subtitle {
+  color: #9ca3af;
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.wallet-section {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(16px);
+  border-radius: 1rem;
+  padding: 1rem;
+  margin: 1rem 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: center;
+}
+
+.wallet-section h3 {
+  color: #fbbf24;
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.network-description {
+  color: #d1d5db;
+  font-size: 0.875rem;
+  text-align: center;
+  margin: 0.5rem 0 1rem;
+  line-height: 1.4;
+}
+
+.connect-wallet-btn {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  color: white;
+  border: none;
+  border-radius: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+  margin: 0.25rem;
+}
+
+.connect-wallet-btn:hover {
+  transform: scale(1.05);
+}
+
+.wallet-connected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.network-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.status-badge {
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.wallet-address {
+  color: #10b981;
+  font-weight: 600;
+  font-family: monospace;
+}
+
+.disconnect-btn {
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.admin-management {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  border-radius: 0.75rem;
+}
+
+.admin-management h4 {
+  color: #fbbf24;
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.admin-management h5 {
+  color: #fbbf24;
+  font-size: 0.75rem;
+  margin: 0.75rem 0 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.add-admin-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.admin-input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  color: white;
+  font-family: monospace;
+  font-size: 0.875rem;
+}
+
+.admin-input::placeholder {
+  color: #9ca3af;
+}
+
+.admin-btn {
+  background: linear-gradient(135deg, #374151, #4b5563);
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.admin-btn:hover {
+  transform: scale(1.05);
+}
+
+.admin-btn.add-admin {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+}
+
+.admin-btn.confirm {
+  background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.admin-btn.remove {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  padding: 0.25rem 0.5rem;
+  font-size: 0.625rem;
+}
+
+.admin-btn.emergency {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+.admin-btn.standard {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+}
+
+.admin-list {
+  margin-top: 0.75rem;
+}
+
+.admin-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.admin-address {
+  font-family: monospace;
+  color: #d1d5db;
+  font-size: 0.875rem;
+}
+
+.admin-controls {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 0.75rem;
+}
+
+.admin-controls h4 {
+  color: #8b5cf6;
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.control-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .motivation-container {
   padding: 0 1.5rem 1.5rem;
   position: relative;
@@ -388,6 +604,21 @@
 .completion-label {
   font-size: 0.875rem;
   color: #9ca3af;
+}
+
+.network-contribution {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: rgba(16, 185, 129, 0.1);
+  border-radius: 0.75rem;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.network-text {
+  color: #6ee7b7;
+  font-size: 0.875rem;
+  margin: 0;
+  text-align: center;
 }
 
 .new-run-button {

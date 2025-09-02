@@ -1,6 +1,50 @@
 import { useRunTracker } from './useRunTracker';
 import './App.css';
 import { useState, useEffect } from 'react';
+import { WalletConnect } from './components/WalletConnect';
+import { useAccount, useContractWrite, useContractRead } from 'wagmi';
+import { parseEther } from 'viem';
+
+// Add your deployed contract address and ABI here
+const CONTRACT_ADDRESS = "0x..."; // TODO: Add your deployed contract address
+const CONTRACT_ABI = [
+  // TODO: Add your contract ABI from Remix here
+  // This is a placeholder - replace with actual ABI
+  {
+    "inputs": [
+      {"internalType": "uint256", "name": "distance", "type": "uint256"},
+      {"internalType": "uint256", "name": "duration", "type": "uint256"},
+      {"internalType": "string", "name": "proofURI", "type": "string"}
+    ],
+    "name": "submitValidation",
+    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [{"internalType": "address", "name": "validator", "type": "address"}],
+    "name": "approveValidator",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [{"internalType": "uint256", "name": "validationId", "type": "uint256"}],
+    "name": "approveValidation",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [{"internalType": "address", "name": "account", "type": "address"}],
+    "name": "balanceOf",
+    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function"
+  }
+];
+
+const OWNER_ADDRESS = "0x..."; // TODO: Add your owner address here
 
 const motivationalQuotes = [
   "Push yourself because no one else is going to do it for you.",
@@ -54,6 +98,39 @@ const motivationalQuotes = [
 export default function App() {
   const { state, stats, formattedStats, start, pause, resume, end, discard } = useRunTracker();
   const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
+  const { isConnected, address } = useAccount();
+  
+  // Admin panel state
+  const [validatorAddress, setValidatorAddress] = useState('');
+  const [validationId, setValidationId] = useState('');
+  const [submittedValidationId, setSubmittedValidationId] = useState<string | null>(null);
+  
+  // Contract functions
+  const { write: submitValidation } = useContractWrite({
+    address: CONTRACT_ADDRESS as `0x${string}`,
+    abi: CONTRACT_ABI,
+    functionName: 'submitValidation',
+  });
+  
+  const { write: approveValidator } = useContractWrite({
+    address: CONTRACT_ADDRESS as `0x${string}`,
+    abi: CONTRACT_ABI,
+    functionName: 'approveValidator',
+  });
+  
+  const { write: approveValidation } = useContractWrite({
+    address: CONTRACT_ADDRESS as `0x${string}`,
+    abi: CONTRACT_ABI,
+    functionName: 'approveValidation',
+  });
+  
+  const { data: userBalance } = useContractRead({
+    address: CONTRACT_ADDRESS as `0x${string}`,
+    abi: CONTRACT_ABI,
+    functionName: 'balanceOf',
+    args: [address as `0x${string}`],
+    enabled: !!address,
+  });
 
   useEffect(() => {
     let interval: number | null = null;
@@ -80,6 +157,87 @@ export default function App() {
     return `${feet} ft (${(feet * 0.000189394).toFixed(3)} mi)`;
   };
 
+  const submitNetworkValidation = async (distance: number, duration: number) => {
+    if (!isConnected || !submitValidation) {
+      console.log('Wallet not connected or contract not loaded');
+      return;
+    }
+    
+    try {
+      // Convert duration from milliseconds to seconds
+      const durationSeconds = Math.floor(duration / 1000);
+      
+      // Create a simple proof URI (in production, upload actual GPS data to IPFS)
+      const proofData = {
+        timestamp: Date.now(),
+        distance: Math.floor(distance),
+        duration: durationSeconds,
+        address: address
+      };
+      const proofURI = `data:${btoa(JSON.stringify(proofData))}`;
+      
+      console.log('Submitting validation to FYTS Protocol...');
+      console.log(`Distance: ${Math.floor(distance)}m, Duration: ${durationSeconds}s`);
+      
+      // Submit to smart contract
+      const result = await submitValidation({
+        args: [BigInt(Math.floor(distance)), BigInt(durationSeconds), proofURI],
+      });
+      
+      console.log('Transaction submitted:', result);
+      setSubmittedValidationId('Pending approval');
+      
+    } catch (error) {
+      console.error('Failed to submit validation:', error);
+      alert('Failed to submit validation. Make sure you are an approved validator.');
+    }
+  };
+
+  const handleRunEnd = () => {
+    end();
+    if (isConnected && stats.distanceMeters > 10) {
+      submitNetworkValidation(stats.distanceMeters, stats.elapsedMs);
+    }
+  };
+  
+  const handleApproveValidator = async () => {
+    if (!approveValidator || !validatorAddress) return;
+    
+    try {
+      const result = await approveValidator({
+        args: [validatorAddress as `0x${string}`],
+      });
+      console.log('Validator approval tx:', result);
+      alert('Validator approved successfully!');
+      setValidatorAddress('');
+    } catch (error) {
+      console.error('Failed to approve validator:', error);
+      alert('Failed to approve validator');
+    }
+  };
+  
+  const handleApproveValidation = async () => {
+    if (!approveValidation || !validationId) return;
+    
+    try {
+      const result = await approveValidation({
+        args: [BigInt(validationId)],
+      });
+      console.log('Validation approval tx:', result);
+      alert('Validation approved successfully!');
+      setValidationId('');
+    } catch (error) {
+      console.error('Failed to approve validation:', error);
+      alert('Failed to approve validation');
+    }
+  };
+  
+  const formatBalance = (balance: any): string => {
+    if (!balance) return '0';
+    const balanceInEther = Number(balance) / 10**18;
+    return balanceInEther.toFixed(2);
+  };
+
   return (
     <div className="app-container">
       <div className="background-gradient"></div>
@@ -89,129 +247,25 @@ export default function App() {
           <div className="logo">F</div>
         </div>
         <h1 className="app-title">FYTS FITNESS</h1>
+        <p className="protocol-subtitle">Movement Validation Protocol</p>
       </div>
 
-      {(state === 'running' || state === 'stationary') && (
-        <div className="motivation-container">
-          <div className="motivation-quote">
-            "{motivationalQuotes[currentQuoteIndex]}"
-          </div>
+      <WalletConnect />
+      
+      {/* Display FYTS Balance if connected */}
+      {isConnected && userBalance && (
+        <div className="balance-display" style={{
+          textAlign: 'center',
+          padding: '1rem',
+          color: '#10b981',
+          fontSize: '1.25rem',
+          fontWeight: 'bold'
+        }}>
+          Your FYTS Balance: {formatBalance(userBalance)} FYTS
         </div>
       )}
-
-      <div className="status-container">
-        <div className="status-card">
-          <div className="status-indicator">
-            <div className={`status-dot ${state}`}></div>
-            <span className="status-text">
-              {state === 'stationary' ? 'Stationary' : state.charAt(0).toUpperCase() + state.slice(1)}
-            </span>
-          </div>
-          <div className="gps-indicator">
-            <div className="gps-dots">
-              <div className="gps-dot"></div>
-              <div className="gps-dot"></div>
-              <div className="gps-dot"></div>
-            </div>
-            <span>GPS</span>
-          </div>
-        </div>
-        {state === 'stationary' && (
-          <div className="stationary-notice">
-            Move to resume active tracking
-          </div>
-        )}
-      </div>
-
-      <div className="distance-container">
-        <div className="distance-value">
-          {formatDistanceWithBoth(stats.distanceMeters)}
-        </div>
-        <div className="distance-label">Distance</div>
-      </div>
-
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-value blue">{formattedStats.duration}</div>
-          <div className="stat-label">Time</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value purple">{formattedStats.pace}</div>
-          <div className="stat-label">Pace</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value orange">{formattedStats.currentSpeed}</div>
-          <div className="stat-label">Speed</div>
-        </div>
-      </div>
-
-      <div className="action-container">
-        {state === 'idle' && (
-          <button 
-            onClick={start}
-            className="start-button"
-          >
-            <div className="button-icon">▶</div>
-            <div className="button-text">START</div>
-            <div className="button-subtitle">Tap to begin</div>
-          </button>
-        )}
-        
-        {(state === 'running' || state === 'stationary') && (
-          <div className="button-group">
-            <button 
-              onClick={pause}
-              className="action-button pause"
-            >
-              ⏸
-            </button>
-            <button 
-              onClick={end}
-              className="action-button stop"
-            >
-              ⏹
-            </button>
-          </div>
-        )}
-        
-        {state === 'paused' && (
-          <div className="button-group">
-            <button 
-              onClick={resume}
-              className="action-button resume"
-            >
-              ▶
-            </button>
-            <button 
-              onClick={end}
-              className="action-button stop"
-            >
-              ⏹
-            </button>
-          </div>
-        )}
-        
-        {state === 'ended' && (
-          <div className="completion-container">
-            <div className="completion-card">
-              <div className="completion-emoji">🏃‍♂️</div>
-              <h2 className="completion-title">Workout Complete!</h2>
-              <p className="completion-subtitle">Amazing job on your run</p>
-              <div className="completion-stats">
-                <div className="completion-distance">{formatDistanceWithBoth(stats.distanceMeters)}</div>
-                <div className="completion-label">Total Distance</div>
-              </div>
-            </div>
-            <button 
-              onClick={discard}
-              className="new-run-button"
-            >
-              <div className="button-icon">★</div>
-              <div className="button-text">NEW RUN</div>
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+      
+      {/* Admin Panel - Only visible to contract owner */}
+      {isConnected && address === OWNER_ADDRESS && (
+        <div className="admin-panel" style={{
+          background: 'rgba(251, 191, 36, 0
