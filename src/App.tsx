@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http } from 'viem';
 import { mainnet, sepolia, polygon, arbitrum, optimism } from 'viem/chains';
 import { injected, walletConnect, coinbaseWallet } from 'wagmi/connectors';
-import { earningSystem } from './utils/mockEarningSystem';
+import { allocationSystem } from './utils/mockAllocationSystem';
 import LegalDisclaimer from './components/LegalDisclaimer';
 
 // Create the wagmi configuration
@@ -115,7 +115,7 @@ function AppContent() {
     }
     
     try {
-      const result = await earningSystem.submitRun(address, distance, duration);
+      const result = await AllocationSystem.submitRun(address, distance, duration);
       
       if (result.validated) {
         setValidationResult({
