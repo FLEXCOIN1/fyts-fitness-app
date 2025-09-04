@@ -9,7 +9,8 @@ interface ValidationResult {
 }
 
 class MockAllocationSystem {
-  private readonly OWNER_ADDRESS = '0xCc1Bb5FE5cF57EEEE54792445586D3379E287d47';
+  // Owner address for future protocol fee distribution
+  // private readonly OWNER_ADDRESS = '0xCc1Bb5FE5cF57EEEE54792445586D3379E287d47';
   private readonly BASE_RATE = 0.001; // 0.001 FYTS per meter
   private readonly PROTOCOL_FEE_RATE = 0.05; // 5% to owner
   
