@@ -8,7 +8,7 @@ import { http } from 'viem';
 import { mainnet, sepolia, polygon, arbitrum, optimism } from 'viem/chains';
 import { injected, walletConnect, coinbaseWallet } from 'wagmi/connectors';
 import { allocationSystem } from './utils/mockAllocationSystem';
-import LegalDisclaimer from './components/LegalDisclaimer';
+import Legaldisclaimer from './components/Legaldisclaimer';
 import StakingDashboard from './components/StakingDashboard';
 import LeaderboardsDashboard from './components/LeaderboardsDashboard';
 
