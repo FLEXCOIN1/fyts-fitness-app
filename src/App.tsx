@@ -7,8 +7,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http } from 'viem';
 import { mainnet, sepolia, polygon, arbitrum, optimism } from 'viem/chains';
 import { injected, walletConnect, coinbaseWallet } from 'wagmi/connectors';
-import { allocationSystem } from './utils/mockallocationSystem';
+import { allocationSystem } from './utils/mockAllocationSystem';
 import LegalDisclaimer from './components/LegalDisclaimer';
+import StakingDashboard from './components/StakingDashboard';
+import LeaderboardsDashboard from './components/LeaderboardsDashboard';
 
 // Create the wagmi configuration
 const config = createConfig({
@@ -33,17 +35,17 @@ const config = createConfig({
 
 const queryClient = new QueryClient();
 
-const motivationalQuotes = [
-  "Your participation strengthens the network.",
-  "Every step validates the protocol.",
-  "Contributing to decentralized fitness validation.",
-  "Your movement data improves the ecosystem.",
-  "Network consensus through physical activity.",
-  "Validating blocks, one step at a time.",
-  "Distributed fitness verification in progress.",
-  "Your contribution matters to the protocol.",
-  "Consensus achieved through movement.",
-  "Building the future of fitness validation.",
+const protocolMessages = [
+  "Validation sequence in progress...",
+  "Contributing to network consensus...",
+  "Movement data processing...",
+  "Protocol synchronization active...",
+  "Distributed validation confirmed...",
+  "Network participation acknowledged...",
+  "Consensus mechanism engaged...",
+  "Validation metrics recording...",
+  "Protocol integrity maintained...",
+  "Decentralized verification active...",
 ];
 
 function AppContent() {
@@ -53,12 +55,12 @@ function AppContent() {
   const { isConnected, address } = useAccount();
   const [validationResult, setValidationResult] = useState<{
     success: boolean;
-    userEarning: number;
-    ownerEarning: number;
+    userAllocation: number;
+    protocolFee: number;
     txHash: string;
   } | null>(null);
   
-  // Terms acceptance state - CHECK AND CLEAR for testing
+  // Terms acceptance state
   const [termsAccepted, setTermsAccepted] = useState(false);
   
   // Navigation state
@@ -75,8 +77,8 @@ function AppContent() {
   
   // Check localStorage for terms acceptance AFTER all hooks
   useEffect(() => {
-    // UNCOMMENT THIS TO RESET TERMS FOR TESTING:
-    localStorage.removeItem('fyts_terms_accepted');
+    // Uncomment to reset terms for testing:
+    // localStorage.removeItem('fyts_terms_accepted');
     
     const accepted = localStorage.getItem('fyts_terms_accepted') === 'true';
     setTermsAccepted(accepted);
@@ -88,7 +90,7 @@ function AppContent() {
     if (state === 'running' || state === 'stationary') {
       interval = setInterval(() => {
         setCurrentQuoteIndex((prevIndex) => 
-          (prevIndex + 1) % motivationalQuotes.length
+          (prevIndex + 1) % protocolMessages.length
         );
       }, 15000);
     }
@@ -115,13 +117,13 @@ function AppContent() {
     }
     
     try {
-      const result = await allocationSystem.submitRun(address, distance, duration);
+      const result = await allocationSystem.submitValidation(address, distance, duration);
       
       if (result.validated) {
         setValidationResult({
           success: true,
-          userEarning: result.userEarning,
-          ownerEarning: result.ownerEarning,
+          userAllocation: result.userAllocation,
+          protocolFee: result.protocolFee,
           txHash: result.transactionHash
         });
         
@@ -146,9 +148,8 @@ function AppContent() {
 
   const handleContactSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Contact form submitted:', contactForm);
+    console.log('Protocol inquiry submitted:', contactForm);
     setContactSubmitted(true);
-    // Reset form after 3 seconds
     setTimeout(() => {
       setContactSubmitted(false);
       setContactForm({
@@ -184,31 +185,31 @@ function AppContent() {
           className={activeTab === 'tracker' ? 'nav-tab active' : 'nav-tab'}
           onClick={() => setActiveTab('tracker')}
         >
-          🏃 Tracker
+          🔄 Validator
         </button>
         <button 
           className={activeTab === 'staking' ? 'nav-tab active' : 'nav-tab'}
           onClick={() => setActiveTab('staking')}
         >
-          💎 Staking
+          🔒 Staking
         </button>
         <button 
           className={activeTab === 'leaderboards' ? 'nav-tab active' : 'nav-tab'}
           onClick={() => setActiveTab('leaderboards')}
         >
-          🏆 Leaderboards
+          📊 Rankings
         </button>
         <button 
           className={activeTab === 'tutorial' ? 'nav-tab active' : 'nav-tab'}
           onClick={() => setActiveTab('tutorial')}
         >
-          📚 How To
+          📖 Protocol
         </button>
         <button 
           className={activeTab === 'contact' ? 'nav-tab active' : 'nav-tab'}
           onClick={() => setActiveTab('contact')}
         >
-          📧 Contact
+          🔧 Support
         </button>
       </div>
 
@@ -220,7 +221,7 @@ function AppContent() {
           {(state === 'running' || state === 'stationary') && (
             <div className="motivation-container">
               <div className="motivation-quote">
-                "{motivationalQuotes[currentQuoteIndex]}"
+                {protocolMessages[currentQuoteIndex]}
               </div>
             </div>
           )}
@@ -230,7 +231,12 @@ function AppContent() {
               <div className="status-indicator">
                 <div className={`status-dot ${state}`}></div>
                 <span className="status-text">
-                  {state === 'stationary' ? 'Stationary' : state.charAt(0).toUpperCase() + state.slice(1)}
+                  {state === 'stationary' ? 'Awaiting Movement' : 
+                   state === 'running' ? 'Validating' :
+                   state === 'paused' ? 'Suspended' :
+                   state === 'ended' ? 'Finalized' :
+                   state === 'idle' ? 'Ready' :
+                   state.charAt(0).toUpperCase() + state.slice(1)}
                 </span>
               </div>
               <div className="gps-indicator">
@@ -244,7 +250,7 @@ function AppContent() {
             </div>
             {state === 'stationary' && (
               <div className="stationary-notice">
-                Movement required for validation
+                Movement required for validation sequence
               </div>
             )}
           </div>
@@ -253,7 +259,7 @@ function AppContent() {
             <div className="distance-value">
               {formatDistanceWithBoth(stats.distanceMeters)}
             </div>
-            <div className="distance-label">Distance Tracked</div>
+            <div className="distance-label">Distance Validated</div>
           </div>
 
           <div className="stats-grid">
@@ -263,11 +269,11 @@ function AppContent() {
             </div>
             <div className="stat-card">
               <div className="stat-value purple">{formattedStats.pace}</div>
-              <div className="stat-label">Pace</div>
+              <div className="stat-label">Pace Metric</div>
             </div>
             <div className="stat-card">
               <div className="stat-value orange">{formattedStats.currentSpeed}</div>
-              <div className="stat-label">Speed</div>
+              <div className="stat-label">Velocity</div>
             </div>
           </div>
 
@@ -275,8 +281,8 @@ function AppContent() {
             {state === 'idle' && (
               <button onClick={start} className="start-button">
                 <div className="button-icon">▶</div>
-                <div className="button-text">START</div>
-                <div className="button-subtitle">Begin validation</div>
+                <div className="button-text">INITIATE</div>
+                <div className="button-subtitle">Begin validation sequence</div>
               </button>
             )}
             
@@ -298,8 +304,8 @@ function AppContent() {
               <div className="completion-container">
                 <div className="completion-card">
                   <div className="completion-emoji">✓</div>
-                  <h2 className="completion-title">Validation Complete</h2>
-                  <p className="completion-subtitle">Thank you for your participation in the protocol</p>
+                  <h2 className="completion-title">Validation Sequence Complete</h2>
+                  <p className="completion-subtitle">Data successfully submitted to protocol</p>
                   <div className="completion-stats">
                     <div className="completion-distance">{formatDistanceWithBoth(stats.distanceMeters)}</div>
                     <div className="completion-label">Distance Validated</div>
@@ -314,10 +320,10 @@ function AppContent() {
                       border: '1px solid rgba(16, 185, 129, 0.2)'
                     }}>
                       <div style={{ color: '#10b981', fontSize: '1.25rem', fontWeight: 'bold' }}>
-                        +{validationResult.userEarning.toFixed(4)} FYTS
+                        +{validationResult.userAllocation.toFixed(4)} FYTS
                       </div>
                       <div style={{ color: '#6ee7b7', fontSize: '0.875rem', marginTop: '0.25rem' }}>
-                        Tokens allocated to wallet
+                        Token allocation processed
                       </div>
                     </div>
                   )}
@@ -330,7 +336,7 @@ function AppContent() {
                   className="new-run-button"
                 >
                   <div className="button-icon">+</div>
-                  <div className="button-text">NEW SESSION</div>
+                  <div className="button-text">NEW VALIDATION</div>
                 </button>
               </div>
             )}
@@ -339,51 +345,15 @@ function AppContent() {
       )}
 
       {/* Staking Tab */}
-      {activeTab === 'staking' && (
-        <div style={{ padding: '2rem', textAlign: 'center' }}>
-          <h2 style={{ color: '#10b981' }}>Staking Protocol</h2>
-          <p style={{ color: '#9ca3af', marginBottom: '2rem' }}>Commitment-based validation rewards</p>
-          <div style={{ 
-            background: 'rgba(255, 255, 255, 0.05)',
-            padding: '2rem',
-            borderRadius: '1rem',
-            maxWidth: '500px',
-            margin: '0 auto'
-          }}>
-            <p style={{ color: '#fbbf24' }}>Feature activating soon</p>
-            <p style={{ color: '#d1d5db', fontSize: '0.875rem', marginTop: '1rem' }}>
-              Stake FYTS tokens to commit to weekly fitness validation goals. 
-              Successful completion results in additional token allocation.
-            </p>
-          </div>
-        </div>
-      )}
+      {activeTab === 'staking' && <StakingDashboard />}
 
       {/* Leaderboards Tab */}
-      {activeTab === 'leaderboards' && (
-        <div style={{ padding: '2rem', textAlign: 'center' }}>
-          <h2 style={{ color: '#10b981' }}>Network Rankings</h2>
-          <p style={{ color: '#9ca3af', marginBottom: '2rem' }}>Top validators in the protocol</p>
-          <div style={{ 
-            background: 'rgba(255, 255, 255, 0.05)',
-            padding: '2rem',
-            borderRadius: '1rem',
-            maxWidth: '500px',
-            margin: '0 auto'
-          }}>
-            <p style={{ color: '#fbbf24' }}>Feature activating soon</p>
-            <p style={{ color: '#d1d5db', fontSize: '0.875rem', marginTop: '1rem' }}>
-              View top validators by distance, consistency, and speed metrics. 
-              Rankings update in real-time as validation data is submitted.
-            </p>
-          </div>
-        </div>
-      )}
+      {activeTab === 'leaderboards' && <LeaderboardsDashboard />}
 
       {/* Tutorial Tab */}
       {activeTab === 'tutorial' && (
         <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
-          <h2 style={{ color: '#10b981', marginBottom: '2rem' }}>Protocol Participation Guide</h2>
+          <h2 style={{ color: '#10b981', marginBottom: '2rem' }}>Protocol Documentation</h2>
           
           <div style={{ 
             background: 'rgba(59, 130, 246, 0.1)',
@@ -392,9 +362,9 @@ function AppContent() {
             marginBottom: '2rem',
             border: '1px solid rgba(59, 130, 246, 0.2)'
           }}>
-            <h3 style={{ color: '#60a5fa', margin: '0 0 1rem 0' }}>It's Simple!</h3>
+            <h3 style={{ color: '#60a5fa', margin: '0 0 1rem 0' }}>Simple Protocol Participation</h3>
             <p style={{ color: '#bfdbfe', fontSize: '1.125rem' }}>
-              Just three steps to participate in the movement validation protocol:
+              Three steps to contribute to the movement validation network:
             </p>
           </div>
 
@@ -421,9 +391,9 @@ function AppContent() {
                 flexShrink: 0
               }}>1</div>
               <div>
-                <h3 style={{ color: '#10b981', margin: '0 0 0.25rem 0' }}>Connect Wallet</h3>
+                <h3 style={{ color: '#10b981', margin: '0 0 0.25rem 0' }}>Initialize Wallet Connection</h3>
                 <p style={{ color: '#d1d5db', margin: 0 }}>
-                  Link your Web3 wallet to begin participation. Your wallet address serves as your validator identity.
+                  Establish secure connection to protocol. Wallet address serves as unique validator identifier.
                 </p>
               </div>
             </div>
@@ -450,9 +420,9 @@ function AppContent() {
                 flexShrink: 0
               }}>2</div>
               <div>
-                <h3 style={{ color: '#f97316', margin: '0 0 0.25rem 0' }}>Press START</h3>
+                <h3 style={{ color: '#f97316', margin: '0 0 0.25rem 0' }}>Initiate Validation</h3>
                 <p style={{ color: '#d1d5db', margin: 0 }}>
-                  Initiate validation session. GPS tracking begins automatically. Move to generate validation data.
+                  Execute validation protocol. GPS triangulation begins automatically. Movement generates validation data.
                 </p>
               </div>
             </div>
@@ -478,9 +448,9 @@ function AppContent() {
                 flexShrink: 0
               }}>3</div>
               <div>
-                <h3 style={{ color: '#a78bfa', margin: '0 0 0.25rem 0' }}>Earn Tokens</h3>
+                <h3 style={{ color: '#a78bfa', margin: '0 0 0.25rem 0' }}>Receive Allocation</h3>
                 <p style={{ color: '#d1d5db', margin: 0 }}>
-                  Complete validation to receive FYTS token allocation. Thank you for your participation in the protocol.
+                  Upon successful validation, FYTS tokens are allocated per protocol parameters. Contribution recorded on-chain.
                 </p>
               </div>
             </div>
@@ -494,7 +464,7 @@ function AppContent() {
             textAlign: 'center'
           }}>
             <p style={{ color: '#6ee7b7', margin: 0, fontWeight: 600 }}>
-              That's it! Your movement validates the network.
+              Protocol participation confirmed. Your validation strengthens the network.
             </p>
           </div>
         </div>
@@ -521,7 +491,7 @@ function AppContent() {
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em'
                 }}>
-                  Username
+                  Validator Username
                 </label>
                 <input
                   type="text"
@@ -549,7 +519,7 @@ function AppContent() {
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em'
                 }}>
-                  First Name
+                  Validator Name
                 </label>
                 <input
                   type="text"
@@ -577,7 +547,7 @@ function AppContent() {
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em'
                 }}>
-                  Email Address
+                  Contact Address
                 </label>
                 <input
                   type="email"
@@ -605,7 +575,7 @@ function AppContent() {
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em'
                 }}>
-                  Details
+                  Support Query Details
                 </label>
                 <textarea
                   required
@@ -642,7 +612,7 @@ function AppContent() {
                   letterSpacing: '0.05em'
                 }}
               >
-                Submit Inquiry
+                Submit Protocol Inquiry
               </button>
             </form>
           ) : (
