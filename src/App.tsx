@@ -8,7 +8,7 @@ import { http } from 'viem';
 import { mainnet, sepolia, polygon, arbitrum, optimism } from 'viem/chains';
 import { injected, walletConnect, coinbaseWallet } from 'wagmi/connectors';
 import { allocationSystem } from './utils/mockAllocationSystem';
-import Legaldisclaimer from './components/Legaldisclaimer';
+import LegalDisclaimer from './components/Legaldisclaimer';
 import StakingDashboard from './components/StakingDashboard';
 import LeaderboardsDashboard from './components/LeaderboardsDashboard';
 
@@ -236,7 +236,7 @@ function AppContent() {
                    state === 'paused' ? 'Suspended' :
                    state === 'ended' ? 'Finalized' :
                    state === 'idle' ? 'Ready' :
-                   state.charAt(0).toUpperCase() + state.slice(1)}
+                   String(state).charAt(0).toUpperCase() + String(state).slice(1)}
                 </span>
               </div>
               <div className="gps-indicator">
