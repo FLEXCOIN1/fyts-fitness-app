@@ -7,17 +7,22 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http } from 'viem';
 import { mainnet, sepolia, polygon, arbitrum, optimism } from 'viem/chains';
 import { injected, walletConnect, coinbaseWallet } from 'wagmi/connectors';
-import { allocationSystem } from './utils/mockAllocationSystem';
+import { ethers } from 'ethers';
+import FYTSContract from './contracts/FYTSFitnessToken.json';
 import LegalDisclaimer from './components/Legaldisclaimer';
 import StakingDashboard from './components/StakingDashboard';
 import LeaderboardsDashboard from './components/LeaderboardsDashboard';
 
+// Contract configuration
+const CONTRACT_ADDRESS = '0x2955128a2ef2c7038381a5F56bcC21A91889595B';
+const SEPOLIA_CHAIN_ID = 11155111;
+
 // Create the wagmi configuration
 const config = createConfig({
-  chains: [mainnet, sepolia, polygon, arbitrum, optimism],
+  chains: [sepolia, mainnet, polygon, arbitrum, optimism],
   transports: {
-    [mainnet.id]: http(),
     [sepolia.id]: http(),
+    [mainnet.id]: http(),
     [polygon.id]: http(),
     [arbitrum.id]: http(),
     [optimism.id]: http(),
@@ -49,16 +54,16 @@ const protocolMessages = [
 ];
 
 function AppContent() {
-  // ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURNS
   const { state, stats, formattedStats, start, pause, resume, end, discard } = useRunTracker();
   const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
-  const { isConnected, address } = useAccount();
+  const { isConnected, address, chain } = useAccount();
   const [validationResult, setValidationResult] = useState<{
     success: boolean;
     userAllocation: number;
-    protocolFee: number;
     txHash: string;
   } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [contractBalance, setContractBalance] = useState('0');
   
   // Terms acceptance state
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -75,14 +80,31 @@ function AppContent() {
   });
   const [contactSubmitted, setContactSubmitted] = useState(false);
   
-  // Check localStorage for terms acceptance AFTER all hooks
+  // Check localStorage for terms acceptance
   useEffect(() => {
-    // Uncomment to reset terms for testing:
-    // localStorage.removeItem('fyts_terms_accepted');
-    
     const accepted = localStorage.getItem('fyts_terms_accepted') === 'true';
     setTermsAccepted(accepted);
   }, []);
+
+  // Check contract balance when wallet connects
+  useEffect(() => {
+    if (isConnected && address) {
+      fetchContractBalance();
+    }
+  }, [isConnected, address]);
+
+  const fetchContractBalance = async () => {
+    if (!window.ethereum || !address) return;
+    
+    try {
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, FYTSContract.abi, provider);
+      const balance = await contract.balanceOf(address);
+      setContractBalance(ethers.utils.formatEther(balance));
+    } catch (error) {
+      console.error('Error fetching balance:', error);
+    }
+  };
 
   // Quote rotation effect
   useEffect(() => {
@@ -112,31 +134,85 @@ function AppContent() {
 
   const submitNetworkValidation = async (distance: number, duration: number) => {
     if (!isConnected || !address) {
-      console.log('Wallet connection required for validation submission');
+      alert('Please connect your wallet first');
       return;
     }
+
+    if (chain?.id !== SEPOLIA_CHAIN_ID) {
+      alert('Please switch to Sepolia testnet');
+      return;
+    }
+
+    setIsSubmitting(true);
     
     try {
-      const result = await allocationSystem.submitValidation(address, distance, duration);
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, FYTSContract.abi, signer);
       
-      if (result.validated) {
-        setValidationResult({
-          success: true,
-          userAllocation: result.userAllocation,
-          protocolFee: result.protocolFee,
-          txHash: result.transactionHash
-        });
-        
-        console.log('Validation submitted to protocol');
+      // Check if user is approved validator
+      const isApproved = await contract.approvedValidators(address);
+      if (!isApproved) {
+        alert('Your address is not an approved validator yet. Contact admin for approval.');
+        setIsSubmitting(false);
+        return;
       }
-    } catch (error) {
+      
+      // Create proof data
+      const proofData = {
+        distance: Math.floor(distance),
+        duration: Math.floor(duration / 1000), // Convert to seconds
+        timestamp: Date.now(),
+        device: navigator.userAgent
+      };
+      
+      const proofURI = `data:${JSON.stringify(proofData)}`;
+      
+      // Submit validation to contract
+      console.log('Submitting validation:', proofData);
+      const tx = await contract.submitValidation(
+        Math.floor(distance),
+        Math.floor(duration / 1000),
+        proofURI
+      );
+      
+      console.log('Transaction sent:', tx.hash);
+      const receipt = await tx.wait();
+      console.log('Transaction confirmed:', receipt);
+      
+      // Calculate approximate reward (matching contract logic)
+      const baseReward = 0.1; // 0.1 FYTS base
+      const distanceReward = (distance * 0.0001); // 0.0001 FYTS per meter
+      const durationBonus = duration > 1800000 ? 0.5 : 0; // 0.5 FYTS for 30+ minutes
+      const estimatedReward = baseReward + distanceReward + durationBonus;
+      
+      setValidationResult({
+        success: true,
+        userAllocation: Math.min(estimatedReward, 10), // Max 10 FYTS
+        txHash: receipt.transactionHash
+      });
+      
+      // Refresh balance
+      await fetchContractBalance();
+      
+      console.log('Validation submitted to blockchain successfully');
+    } catch (error: any) {
       console.error('Validation submission error:', error);
+      if (error.message.includes('Daily limit reached')) {
+        alert('You have reached your daily validation limit (10 per day)');
+      } else if (error.message.includes('Speed too high')) {
+        alert('Movement speed too high - possible GPS error');
+      } else {
+        alert(`Error submitting validation: ${error.message}`);
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleRunEnd = () => {
     end();
-    if (isConnected && stats.distanceMeters > 10) {
+    if (isConnected && stats.distanceMeters > 100) { // Min 100m for validation
       submitNetworkValidation(stats.distanceMeters, stats.elapsedMs);
     }
   };
@@ -161,12 +237,10 @@ function AppContent() {
     }, 3000);
   };
 
-  // CONDITIONAL RETURN AFTER ALL HOOKS
   if (!termsAccepted) {
     return <LegalDisclaimer onAccept={handleAcceptTerms} />;
   }
 
-  // Main app interface
   return (
     <div className="app-container">
       <div className="background-gradient"></div>
@@ -177,6 +251,24 @@ function AppContent() {
         </div>
         <h1 className="app-title">FYTS FITNESS</h1>
         <p className="protocol-subtitle">Movement Validation Protocol</p>
+        {isConnected && (
+          <div style={{ 
+            marginTop: '0.5rem', 
+            padding: '0.5rem 1rem', 
+            background: 'rgba(16, 185, 129, 0.1)',
+            borderRadius: '0.5rem',
+            border: '1px solid rgba(16, 185, 129, 0.2)'
+          }}>
+            <span style={{ color: '#10b981', fontWeight: 'bold' }}>
+              Balance: {parseFloat(contractBalance).toFixed(4)} FYTS
+            </span>
+            {chain?.id !== SEPOLIA_CHAIN_ID && (
+              <span style={{ color: '#ef4444', marginLeft: '1rem' }}>
+                ⚠️ Switch to Sepolia Testnet
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Navigation */}
@@ -289,14 +381,16 @@ function AppContent() {
             {(state === 'running' || state === 'stationary') && (
               <div className="button-group">
                 <button onClick={pause} className="action-button pause">⏸</button>
-                <button onClick={handleRunEnd} className="action-button stop">⏹</button>
+                <button onClick={handleRunEnd} className="action-button stop" disabled={isSubmitting}>
+                  {isSubmitting ? '⏳' : '⏹'}
+                </button>
               </div>
             )}
             
             {state === 'paused' && (
               <div className="button-group">
                 <button onClick={resume} className="action-button resume">▶</button>
-                <button onClick={handleRunEnd} className="action-button stop">⏹</button>
+                <button onClick={handleRunEnd} className="action-button stop" disabled={isSubmitting}>⏹</button>
               </div>
             )}
             
@@ -305,7 +399,9 @@ function AppContent() {
                 <div className="completion-card">
                   <div className="completion-emoji">✓</div>
                   <h2 className="completion-title">Validation Sequence Complete</h2>
-                  <p className="completion-subtitle">Data successfully submitted to protocol</p>
+                  <p className="completion-subtitle">
+                    {validationResult ? 'Data submitted to blockchain' : 'Ready for next validation'}
+                  </p>
                   <div className="completion-stats">
                     <div className="completion-distance">{formatDistanceWithBoth(stats.distanceMeters)}</div>
                     <div className="completion-label">Distance Validated</div>
@@ -320,11 +416,19 @@ function AppContent() {
                       border: '1px solid rgba(16, 185, 129, 0.2)'
                     }}>
                       <div style={{ color: '#10b981', fontSize: '1.25rem', fontWeight: 'bold' }}>
-                        +{validationResult.userAllocation.toFixed(4)} FYTS
+                        +{validationResult.userAllocation.toFixed(4)} FYTS (Pending)
                       </div>
                       <div style={{ color: '#6ee7b7', fontSize: '0.875rem', marginTop: '0.25rem' }}>
-                        Token allocation processed
+                        Awaiting admin approval
                       </div>
+                      <a 
+                        href={`https://sepolia.etherscan.io/tx/${validationResult.txHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: '#3b82f6', fontSize: '0.75rem', marginTop: '0.5rem', display: 'block' }}
+                      >
+                        View on Etherscan →
+                      </a>
                     </div>
                   )}
                 </div>
@@ -362,109 +466,65 @@ function AppContent() {
             marginBottom: '2rem',
             border: '1px solid rgba(59, 130, 246, 0.2)'
           }}>
-            <h3 style={{ color: '#60a5fa', margin: '0 0 1rem 0' }}>Simple Protocol Participation</h3>
-            <p style={{ color: '#bfdbfe', fontSize: '1.125rem' }}>
-              Three steps to contribute to the movement validation network:
+            <h3 style={{ color: '#60a5fa', margin: '0 0 1rem 0' }}>Blockchain Integration Active</h3>
+            <p style={{ color: '#bfdbfe', fontSize: '1rem' }}>
+              Contract: {CONTRACT_ADDRESS.slice(0, 6)}...{CONTRACT_ADDRESS.slice(-4)}
+            </p>
+            <p style={{ color: '#bfdbfe', fontSize: '1rem', marginTop: '0.5rem' }}>
+              Network: Sepolia Testnet
+            </p>
+            <p style={{ color: '#bfdbfe', fontSize: '1rem', marginTop: '0.5rem' }}>
+              Status: {isConnected ? '🟢 Connected' : '🔴 Not Connected'}
             </p>
           </div>
 
           <div style={{ marginBottom: '2rem' }}>
+            <h3 style={{ color: '#10b981', marginBottom: '1rem' }}>How It Works</h3>
+            
             <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '1rem',
-              marginBottom: '1.5rem',
               padding: '1rem',
               background: 'rgba(255, 255, 255, 0.03)',
-              borderRadius: '0.75rem'
+              borderRadius: '0.75rem',
+              marginBottom: '1rem'
             }}>
-              <div style={{
-                width: '3rem',
-                height: '3rem',
-                background: 'linear-gradient(135deg, #10b981, #059669)',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '1.5rem',
-                fontWeight: 'bold',
-                flexShrink: 0
-              }}>1</div>
-              <div>
-                <h3 style={{ color: '#10b981', margin: '0 0 0.25rem 0' }}>Initialize Wallet Connection</h3>
-                <p style={{ color: '#d1d5db', margin: 0 }}>
-                  Establish secure connection to protocol. Wallet address serves as unique validator identifier.
-                </p>
-              </div>
+              <h4 style={{ color: '#f97316', margin: '0 0 0.5rem 0' }}>1. Connect Wallet</h4>
+              <p style={{ color: '#d1d5db', margin: 0 }}>
+                Connect MetaMask or WalletConnect to Sepolia testnet
+              </p>
             </div>
 
             <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '1rem',
-              marginBottom: '1.5rem',
               padding: '1rem',
               background: 'rgba(255, 255, 255, 0.03)',
-              borderRadius: '0.75rem'
+              borderRadius: '0.75rem',
+              marginBottom: '1rem'
             }}>
-              <div style={{
-                width: '3rem',
-                height: '3rem',
-                background: 'linear-gradient(135deg, #f97316, #ea580c)',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '1.5rem',
-                fontWeight: 'bold',
-                flexShrink: 0
-              }}>2</div>
-              <div>
-                <h3 style={{ color: '#f97316', margin: '0 0 0.25rem 0' }}>Initiate Validation</h3>
-                <p style={{ color: '#d1d5db', margin: 0 }}>
-                  Execute validation protocol. GPS triangulation begins automatically. Movement generates validation data.
-                </p>
-              </div>
+              <h4 style={{ color: '#f97316', margin: '0 0 0.5rem 0' }}>2. Start Validation</h4>
+              <p style={{ color: '#d1d5db', margin: 0 }}>
+                GPS tracks your movement. Minimum 100m required.
+              </p>
             </div>
 
             <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '1rem',
               padding: '1rem',
               background: 'rgba(255, 255, 255, 0.03)',
               borderRadius: '0.75rem'
             }}>
-              <div style={{
-                width: '3rem',
-                height: '3rem',
-                background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '1.5rem',
-                fontWeight: 'bold',
-                flexShrink: 0
-              }}>3</div>
-              <div>
-                <h3 style={{ color: '#a78bfa', margin: '0 0 0.25rem 0' }}>Receive Allocation</h3>
-                <p style={{ color: '#d1d5db', margin: 0 }}>
-                  Upon successful validation, FYTS tokens are allocated per protocol parameters. Contribution recorded on-chain.
-                </p>
-              </div>
+              <h4 style={{ color: '#f97316', margin: '0 0 0.5rem 0' }}>3. Earn FYTS</h4>
+              <p style={{ color: '#d1d5db', margin: 0 }}>
+                Base: 0.1 FYTS + 0.0001 FYTS/meter + bonuses. Max 10 FYTS per validation.
+              </p>
             </div>
           </div>
 
           <div style={{
-            background: 'rgba(16, 185, 129, 0.1)',
+            background: 'rgba(239, 68, 68, 0.1)',
             padding: '1rem',
             borderRadius: '0.75rem',
-            border: '1px solid rgba(16, 185, 129, 0.2)',
-            textAlign: 'center'
+            border: '1px solid rgba(239, 68, 68, 0.2)'
           }}>
-            <p style={{ color: '#6ee7b7', margin: 0, fontWeight: 600 }}>
-              Protocol participation confirmed. Your validation strengthens the network.
+            <p style={{ color: '#fca5a5', margin: 0, fontWeight: 600 }}>
+              ⚠️ Testnet Only - Tokens have no real value
             </p>
           </div>
         </div>
@@ -628,18 +688,6 @@ function AppContent() {
               <p style={{ color: '#6ee7b7' }}>Protocol support will respond within 24-48 hours</p>
             </div>
           )}
-
-          <div style={{
-            marginTop: '2rem',
-            padding: '1rem',
-            background: 'rgba(255, 255, 255, 0.03)',
-            borderRadius: '0.75rem',
-            textAlign: 'center'
-          }}>
-            <p style={{ color: '#9ca3af', fontSize: '0.875rem', margin: 0 }}>
-              For immediate technical support, consult the protocol documentation
-            </p>
-          </div>
         </div>
       )}
     </div>
