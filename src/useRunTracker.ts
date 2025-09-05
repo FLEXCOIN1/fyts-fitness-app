@@ -33,7 +33,7 @@ export function useRunTracker() {
   const pauseStartRef = useRef<number>(0);
   const lastPositionRef = useRef<GPSPoint | null>(null);
   const stationaryCountRef = useRef<number>(0);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<number | null>(null);
 
   // Enhanced GPS options for mobile
   const gpsOptions: PositionOptions = {
