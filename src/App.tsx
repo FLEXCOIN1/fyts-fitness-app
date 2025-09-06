@@ -13,11 +13,11 @@ import LegalDisclaimer from './components/Legaldisclaimer';
 import StakingDashboard from './components/StakingDashboard';
 import LeaderboardsDashboard from './components/LeaderboardsDashboard';
 
+
 // Contract configuration
 const CONTRACT_ADDRESS = '0x2955128a2ef2c7038381a5F56bcC21A91889595B';
 const SEPOLIA_CHAIN_ID = 11155111;
-
-// Create the wagmi configuration
+// In App.tsx, update the wagmi config (around line 20)
 const config = createConfig({
   chains: [sepolia, mainnet, polygon, arbitrum, optimism],
   transports: {
@@ -28,15 +28,23 @@ const config = createConfig({
     [optimism.id]: http(),
   },
   connectors: [
-    injected(),
     walletConnect({ 
-      projectId: '794e2b891a07a5da78b220c48523541e'
+      projectId: '794e2b891a07a5da78b220c48523541e',
+      showQrModal: true,
+      metadata: {
+        name: 'FytS Fitness',
+        description: 'Movement Validation Protocol',
+        url: 'https://fyts.netlify.app',
+        icons: ['https://fyts.netlify.app/icon.png']
+      }
     }),
+    injected(),
     coinbaseWallet({
       appName: 'FytS Fitness',
     }),
   ],
 });
+
 
 const queryClient = new QueryClient();
 
