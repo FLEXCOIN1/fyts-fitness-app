@@ -13,11 +13,11 @@ import LegalDisclaimer from './components/Legaldisclaimer';
 import StakingDashboard from './components/StakingDashboard';
 import LeaderboardsDashboard from './components/LeaderboardsDashboard';
 
-
 // Contract configuration
 const CONTRACT_ADDRESS = '0x2955128a2ef2c7038381a5F56bcC21A91889595B';
 const SEPOLIA_CHAIN_ID = 11155111;
-// In App.tsx, update the wagmi config (around line 20)
+
+// Create the wagmi configuration
 const config = createConfig({
   chains: [sepolia, mainnet, polygon, arbitrum, optimism],
   transports: {
@@ -45,7 +45,6 @@ const config = createConfig({
   ],
 });
 
-
 const queryClient = new QueryClient();
 
 const protocolMessages = [
@@ -62,7 +61,7 @@ const protocolMessages = [
 ];
 
 function AppContent() {
-  const { state, stats, formattedStats, start, pause, resume, end, discard } = useRunTracker();
+  const { state, stats, formattedStats, start, pause, resume, end, discard, addDistance } = useRunTracker();
   const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
   const { isConnected, address, chain } = useAccount();
   const [validationResult, setValidationResult] = useState<{
@@ -355,6 +354,30 @@ function AppContent() {
             )}
           </div>
 
+          {/* Debug Button for Mobile Testing */}
+          {state === 'running' && (
+            <button 
+              onClick={() => addDistance(100)}
+              style={{
+                position: 'fixed',
+                bottom: '80px',
+                right: '20px',
+                padding: '12px 20px',
+                background: 'linear-gradient(135deg, #f97316, #ea580c)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+                zIndex: 9999,
+                cursor: 'pointer'
+              }}
+            >
+              +100m (Debug)
+            </button>
+          )}
+
           <div className="distance-container">
             <div className="distance-value">
               {formatDistanceWithBoth(stats.distanceMeters)}
@@ -509,7 +532,7 @@ function AppContent() {
             }}>
               <h4 style={{ color: '#f97316', margin: '0 0 0.5rem 0' }}>2. Start Validation</h4>
               <p style={{ color: '#d1d5db', margin: 0 }}>
-                GPS tracks your movement. Minimum 100m required.
+                GPS tracks your movement. Minimum 100m required. Use +100m button if GPS fails.
               </p>
             </div>
 
@@ -696,6 +719,18 @@ function AppContent() {
               <p style={{ color: '#6ee7b7' }}>Protocol support will respond within 24-48 hours</p>
             </div>
           )}
+
+          <div style={{
+            marginTop: '2rem',
+            padding: '1rem',
+            background: 'rgba(255, 255, 255, 0.03)',
+            borderRadius: '0.75rem',
+            textAlign: 'center'
+          }}>
+            <p style={{ color: '#9ca3af', fontSize: '0.875rem', margin: 0 }}>
+              For immediate technical support, consult the protocol documentation
+            </p>
+          </div>
         </div>
       )}
     </div>
