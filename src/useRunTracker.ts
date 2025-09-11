@@ -1,4 +1,3 @@
-// src/useRunTracker.ts
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 interface GPSPoint {
@@ -204,8 +203,8 @@ export function useRunTracker() {
       ...prev,
       distanceMeters: prev.distanceMeters + meters
     }));
-    console.log(`Manually added ${meters}m`);
-  }, []);
+    console.log(`Manually added ${meters}m, new total: ${stats.distanceMeters + meters}m`);
+  }, [stats.distanceMeters]);
 
   const formattedStats = {
     distance: `${(stats.distanceMeters / 1000).toFixed(2)} km`,

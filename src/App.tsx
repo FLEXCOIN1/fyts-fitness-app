@@ -71,6 +71,7 @@ function AppContent() {
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [contractBalance, setContractBalance] = useState('0');
+  const [pendingValidations, setPendingValidations] = useState<any[]>([]);
   
   // Terms acceptance state
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -93,10 +94,11 @@ function AppContent() {
     setTermsAccepted(accepted);
   }, []);
 
-  // Check contract balance when wallet connects
+  // Check contract balance and pending validations when wallet connects
   useEffect(() => {
     if (isConnected && address) {
       fetchContractBalance();
+      checkPendingValidations();
     }
   }, [isConnected, address]);
 
@@ -110,6 +112,20 @@ function AppContent() {
       setContractBalance(ethers.utils.formatEther(balance));
     } catch (error) {
       console.error('Error fetching balance:', error);
+    }
+  };
+
+  const checkPendingValidations = async () => {
+    if (!window.ethereum || !address) return;
+    
+    try {
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, FYTSContract.abi, provider);
+      const pending = await contract.getPendingValidations();
+      setPendingValidations(pending);
+      console.log('Pending validations:', pending.length);
+    } catch (error) {
+      console.error('Error checking pending validations:', error);
     }
   };
 
@@ -140,27 +156,41 @@ function AppContent() {
   };
 
   const submitNetworkValidation = async (distance: number, duration: number) => {
+    console.log('Starting validation submission...');
+    console.log('Distance:', distance, 'Duration:', duration);
+    console.log('Connected:', isConnected, 'Address:', address, 'Chain:', chain?.id);
+    
     if (!isConnected || !address) {
       alert('Please connect your wallet first');
       return;
     }
 
     if (chain?.id !== SEPOLIA_CHAIN_ID) {
-      alert('Please switch to Sepolia testnet');
+      alert(`Wrong network! Please switch to Sepolia. Current chain: ${chain?.id}`);
+      return;
+    }
+
+    if (distance < 100) {
+      alert(`Distance too short: ${distance.toFixed(2)}m. Minimum 100m required.`);
       return;
     }
 
     setIsSubmitting(true);
     
     try {
+      alert('Submitting validation to blockchain... This may take 30 seconds.');
+      
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
       const contract = new ethers.Contract(CONTRACT_ADDRESS, FYTSContract.abi, signer);
       
-      // Check if user is approved validator
+      // Check approval status
       const isApproved = await contract.approvedValidators(address);
+      console.log('Is approved validator:', isApproved);
+      
       if (!isApproved) {
-        alert('Your address is not an approved validator yet. Contact admin for approval.');
+        alert('Your address is not an approved validator. You are already approved, so this should not happen. Check console for details.');
+        console.error('Approval check failed for address:', address);
         setIsSubmitting(false);
         return;
       }
@@ -168,7 +198,7 @@ function AppContent() {
       // Create proof data
       const proofData = {
         distance: Math.floor(distance),
-        duration: Math.floor(duration / 1000), // Convert to seconds
+        duration: Math.floor(duration / 1000),
         timestamp: Date.now(),
         device: navigator.userAgent
       };
@@ -176,41 +206,56 @@ function AppContent() {
       const proofURI = `data:${JSON.stringify(proofData)}`;
       
       // Submit validation to contract
-      console.log('Submitting validation:', proofData);
+      console.log('Submitting with params:', {
+        distance: Math.floor(distance),
+        duration: Math.floor(duration / 1000),
+        proofURI
+      });
+      
       const tx = await contract.submitValidation(
         Math.floor(distance),
         Math.floor(duration / 1000),
         proofURI
       );
       
+      alert(`Transaction sent! Hash: ${tx.hash.slice(0,10)}...`);
       console.log('Transaction sent:', tx.hash);
+      
       const receipt = await tx.wait();
       console.log('Transaction confirmed:', receipt);
       
-      // Calculate approximate reward (matching contract logic)
-      const baseReward = 0.1; // 0.1 FYTS base
-      const distanceReward = (distance * 0.0001); // 0.0001 FYTS per meter
-      const durationBonus = duration > 1800000 ? 0.5 : 0; // 0.5 FYTS for 30+ minutes
+      // Get the validation ID from events
+      const validationId = receipt.events?.find((e: any) => e.event === 'ValidationSubmitted')?.args?.validationId;
+      
+      alert(`Validation submitted successfully! ID: ${validationId || 'pending'}. Admin approval required for token distribution.`);
+      
+      // Calculate approximate reward
+      const baseReward = 0.1;
+      const distanceReward = (distance * 0.0001);
+      const durationBonus = duration > 1800000 ? 0.5 : 0;
       const estimatedReward = baseReward + distanceReward + durationBonus;
       
       setValidationResult({
         success: true,
-        userAllocation: Math.min(estimatedReward, 10), // Max 10 FYTS
+        userAllocation: Math.min(estimatedReward, 10),
         txHash: receipt.transactionHash
       });
       
-      // Refresh balance
+      // Refresh balance and pending validations
       await fetchContractBalance();
+      await checkPendingValidations();
       
-      console.log('Validation submitted to blockchain successfully');
     } catch (error: any) {
-      console.error('Validation submission error:', error);
+      console.error('Full error:', error);
+      
       if (error.message.includes('Daily limit reached')) {
         alert('You have reached your daily validation limit (10 per day)');
       } else if (error.message.includes('Speed too high')) {
         alert('Movement speed too high - possible GPS error');
+      } else if (error.message.includes('user rejected')) {
+        alert('Transaction cancelled by user');
       } else {
-        alert(`Error submitting validation: ${error.message}`);
+        alert(`Error: ${error.message || 'Unknown error occurred'}`);
       }
     } finally {
       setIsSubmitting(false);
@@ -219,8 +264,24 @@ function AppContent() {
 
   const handleRunEnd = () => {
     end();
-    if (isConnected && stats.distanceMeters > 100) { // Min 100m for validation
-      submitNetworkValidation(stats.distanceMeters, stats.elapsedMs);
+    
+    // Log final stats
+    console.log('Run ended with stats:', {
+      distance: stats.distanceMeters,
+      duration: stats.elapsedMs,
+      connected: isConnected,
+      address: address
+    });
+    
+    // Check if we should submit
+    if (stats.distanceMeters >= 100) {
+      if (isConnected && address) {
+        submitNetworkValidation(stats.distanceMeters, stats.elapsedMs);
+      } else {
+        alert('Connect wallet to submit validation and earn FYTS tokens');
+      }
+    } else {
+      console.log('Distance too short for validation:', stats.distanceMeters);
     }
   };
 
@@ -259,20 +320,14 @@ function AppContent() {
         <h1 className="app-title">FYTS FITNESS</h1>
         <p className="protocol-subtitle">Movement Validation Protocol</p>
         {isConnected && (
-          <div style={{ 
-            marginTop: '0.5rem', 
-            padding: '0.5rem 1rem', 
-            background: 'rgba(16, 185, 129, 0.1)',
-            borderRadius: '0.5rem',
-            border: '1px solid rgba(16, 185, 129, 0.2)'
-          }}>
-            <span style={{ color: '#10b981', fontWeight: 'bold' }}>
-              Balance: {parseFloat(contractBalance).toFixed(4)} FYTS
-            </span>
+          <div className="balance-display">
+            <span className="balance-label">Balance:</span>
+            <span className="balance-value">{parseFloat(contractBalance).toFixed(4)} FYTS</span>
+            {pendingValidations.length > 0 && (
+              <span className="pending-badge">{pendingValidations.length} pending</span>
+            )}
             {chain?.id !== SEPOLIA_CHAIN_ID && (
-              <span style={{ color: '#ef4444', marginLeft: '1rem' }}>
-                ⚠️ Switch to Sepolia Testnet
-              </span>
+              <span className="network-warning">⚠️ Switch to Sepolia</span>
             )}
           </div>
         )}
@@ -357,22 +412,17 @@ function AppContent() {
           {/* Debug Button for Mobile Testing */}
           {state === 'running' && (
             <button 
-              onClick={() => addDistance(100)}
-              style={{
-                position: 'fixed',
-                bottom: '80px',
-                right: '20px',
-                padding: '12px 20px',
-                background: 'linear-gradient(135deg, #f97316, #ea580c)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '14px',
-                fontWeight: 'bold',
-                boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
-                zIndex: 9999,
-                cursor: 'pointer'
+              onClick={(e) => {
+                addDistance(100);
+                const btn = e.currentTarget;
+                btn.style.background = '#10b981';
+                btn.textContent = '✓ Added!';
+                setTimeout(() => {
+                  btn.style.background = 'linear-gradient(135deg, #f97316, #ea580c)';
+                  btn.textContent = '+100m (Debug)';
+                }, 1000);
               }}
+              className="debug-button"
             >
               +100m (Debug)
             </button>
@@ -431,7 +481,10 @@ function AppContent() {
                   <div className="completion-emoji">✓</div>
                   <h2 className="completion-title">Validation Sequence Complete</h2>
                   <p className="completion-subtitle">
-                    {validationResult ? 'Data submitted to blockchain' : 'Ready for next validation'}
+                    {validationResult ? 'Data submitted to blockchain' : 
+                     stats.distanceMeters < 100 ? 'Distance too short (min 100m)' :
+                     !isConnected ? 'Connect wallet to submit' :
+                     'Ready for submission'}
                   </p>
                   <div className="completion-stats">
                     <div className="completion-distance">{formatDistanceWithBoth(stats.distanceMeters)}</div>
@@ -439,24 +492,18 @@ function AppContent() {
                   </div>
                   
                   {validationResult && validationResult.success && (
-                    <div style={{ 
-                      marginTop: '1rem', 
-                      padding: '1rem', 
-                      background: 'rgba(16, 185, 129, 0.1)',
-                      borderRadius: '0.75rem',
-                      border: '1px solid rgba(16, 185, 129, 0.2)'
-                    }}>
-                      <div style={{ color: '#10b981', fontSize: '1.25rem', fontWeight: 'bold' }}>
+                    <div className="validation-result">
+                      <div className="result-amount">
                         +{validationResult.userAllocation.toFixed(4)} FYTS (Pending)
                       </div>
-                      <div style={{ color: '#6ee7b7', fontSize: '0.875rem', marginTop: '0.25rem' }}>
+                      <div className="result-status">
                         Awaiting admin approval
                       </div>
                       <a 
                         href={`https://sepolia.etherscan.io/tx/${validationResult.txHash}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        style={{ color: '#3b82f6', fontSize: '0.75rem', marginTop: '0.5rem', display: 'block' }}
+                        className="result-link"
                       >
                         View on Etherscan →
                       </a>
@@ -487,249 +534,106 @@ function AppContent() {
 
       {/* Tutorial Tab */}
       {activeTab === 'tutorial' && (
-        <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
-          <h2 style={{ color: '#10b981', marginBottom: '2rem' }}>Protocol Documentation</h2>
+        <div className="tutorial-container">
+          <h2 className="section-title">Protocol Documentation</h2>
           
-          <div style={{ 
-            background: 'rgba(59, 130, 246, 0.1)',
-            padding: '1.5rem',
-            borderRadius: '1rem',
-            marginBottom: '2rem',
-            border: '1px solid rgba(59, 130, 246, 0.2)'
-          }}>
-            <h3 style={{ color: '#60a5fa', margin: '0 0 1rem 0' }}>Blockchain Integration Active</h3>
-            <p style={{ color: '#bfdbfe', fontSize: '1rem' }}>
-              Contract: {CONTRACT_ADDRESS.slice(0, 6)}...{CONTRACT_ADDRESS.slice(-4)}
-            </p>
-            <p style={{ color: '#bfdbfe', fontSize: '1rem', marginTop: '0.5rem' }}>
-              Network: Sepolia Testnet
-            </p>
-            <p style={{ color: '#bfdbfe', fontSize: '1rem', marginTop: '0.5rem' }}>
-              Status: {isConnected ? '🟢 Connected' : '🔴 Not Connected'}
-            </p>
+          <div className="info-card primary">
+            <h3>Blockchain Integration Active</h3>
+            <p>Contract: {CONTRACT_ADDRESS.slice(0, 6)}...{CONTRACT_ADDRESS.slice(-4)}</p>
+            <p>Network: Sepolia Testnet</p>
+            <p>Status: {isConnected ? '🟢 Connected' : '🔴 Not Connected'}</p>
           </div>
 
-          <div style={{ marginBottom: '2rem' }}>
-            <h3 style={{ color: '#10b981', marginBottom: '1rem' }}>How It Works</h3>
+          <div className="steps-container">
+            <h3>How It Works</h3>
             
-            <div style={{ 
-              padding: '1rem',
-              background: 'rgba(255, 255, 255, 0.03)',
-              borderRadius: '0.75rem',
-              marginBottom: '1rem'
-            }}>
-              <h4 style={{ color: '#f97316', margin: '0 0 0.5rem 0' }}>1. Connect Wallet</h4>
-              <p style={{ color: '#d1d5db', margin: 0 }}>
-                Connect MetaMask or WalletConnect to Sepolia testnet
-              </p>
+            <div className="step-card">
+              <h4>1. Connect Wallet</h4>
+              <p>Connect MetaMask or WalletConnect to Sepolia testnet</p>
             </div>
 
-            <div style={{ 
-              padding: '1rem',
-              background: 'rgba(255, 255, 255, 0.03)',
-              borderRadius: '0.75rem',
-              marginBottom: '1rem'
-            }}>
-              <h4 style={{ color: '#f97316', margin: '0 0 0.5rem 0' }}>2. Start Validation</h4>
-              <p style={{ color: '#d1d5db', margin: 0 }}>
-                GPS tracks your movement. Minimum 100m required. Use +100m button if GPS fails.
-              </p>
+            <div className="step-card">
+              <h4>2. Start Validation</h4>
+              <p>GPS tracks movement. Min 100m. Use +100m button if GPS fails.</p>
             </div>
 
-            <div style={{ 
-              padding: '1rem',
-              background: 'rgba(255, 255, 255, 0.03)',
-              borderRadius: '0.75rem'
-            }}>
-              <h4 style={{ color: '#f97316', margin: '0 0 0.5rem 0' }}>3. Earn FYTS</h4>
-              <p style={{ color: '#d1d5db', margin: 0 }}>
-                Base: 0.1 FYTS + 0.0001 FYTS/meter + bonuses. Max 10 FYTS per validation.
-              </p>
+            <div className="step-card">
+              <h4>3. Earn FYTS</h4>
+              <p>Base: 0.1 FYTS + 0.0001 FYTS/meter + bonuses. Max 10 FYTS per validation.</p>
             </div>
           </div>
 
-          <div style={{
-            background: 'rgba(239, 68, 68, 0.1)',
-            padding: '1rem',
-            borderRadius: '0.75rem',
-            border: '1px solid rgba(239, 68, 68, 0.2)'
-          }}>
-            <p style={{ color: '#fca5a5', margin: 0, fontWeight: 600 }}>
-              ⚠️ Testnet Only - Tokens have no real value
-            </p>
+          <div className="warning-card">
+            <p>⚠️ Testnet Only - Tokens have no real value</p>
           </div>
         </div>
       )}
 
       {/* Contact Tab */}
       {activeTab === 'contact' && (
-        <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
-          <h2 style={{ color: '#10b981', marginBottom: '2rem' }}>Protocol Support</h2>
+        <div className="contact-container">
+          <h2 className="section-title">Protocol Support</h2>
           
           {!contactSubmitted ? (
-            <form onSubmit={handleContactSubmit} style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              padding: '2rem',
-              borderRadius: '1rem',
-              border: '1px solid rgba(255, 255, 255, 0.1)'
-            }}>
-              <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{ 
-                  display: 'block', 
-                  color: '#d1d5db', 
-                  marginBottom: '0.5rem',
-                  fontSize: '0.875rem',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
-                }}>
-                  Validator Username
-                </label>
+            <form onSubmit={handleContactSubmit} className="contact-form">
+              <div className="form-group">
+                <label>Validator Username</label>
                 <input
                   type="text"
                   required
                   value={contactForm.username}
                   onChange={(e) => setContactForm({...contactForm, username: e.target.value})}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    background: 'rgba(0, 0, 0, 0.3)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    borderRadius: '0.5rem',
-                    color: 'white',
-                    fontSize: '1rem'
-                  }}
+                  className="form-input"
                 />
               </div>
 
-              <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{ 
-                  display: 'block', 
-                  color: '#d1d5db', 
-                  marginBottom: '0.5rem',
-                  fontSize: '0.875rem',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
-                }}>
-                  Validator Name
-                </label>
+              <div className="form-group">
+                <label>Validator Name</label>
                 <input
                   type="text"
                   required
                   value={contactForm.firstName}
                   onChange={(e) => setContactForm({...contactForm, firstName: e.target.value})}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    background: 'rgba(0, 0, 0, 0.3)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    borderRadius: '0.5rem',
-                    color: 'white',
-                    fontSize: '1rem'
-                  }}
+                  className="form-input"
                 />
               </div>
 
-              <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{ 
-                  display: 'block', 
-                  color: '#d1d5db', 
-                  marginBottom: '0.5rem',
-                  fontSize: '0.875rem',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
-                }}>
-                  Contact Address
-                </label>
+              <div className="form-group">
+                <label>Contact Email</label>
                 <input
                   type="email"
                   required
                   value={contactForm.email}
                   onChange={(e) => setContactForm({...contactForm, email: e.target.value})}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    background: 'rgba(0, 0, 0, 0.3)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    borderRadius: '0.5rem',
-                    color: 'white',
-                    fontSize: '1rem'
-                  }}
+                  className="form-input"
                 />
               </div>
 
-              <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{ 
-                  display: 'block', 
-                  color: '#d1d5db', 
-                  marginBottom: '0.5rem',
-                  fontSize: '0.875rem',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
-                }}>
-                  Support Query Details
-                </label>
+              <div className="form-group">
+                <label>Support Query Details</label>
                 <textarea
                   required
                   rows={5}
                   value={contactForm.details}
                   onChange={(e) => setContactForm({...contactForm, details: e.target.value})}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    background: 'rgba(0, 0, 0, 0.3)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    borderRadius: '0.5rem',
-                    color: 'white',
-                    fontSize: '1rem',
-                    resize: 'vertical',
-                    minHeight: '120px'
-                  }}
+                  className="form-textarea"
                 />
               </div>
 
-              <button
-                type="submit"
-                style={{
-                  width: '100%',
-                  padding: '1rem',
-                  background: 'linear-gradient(135deg, #10b981, #059669)',
-                  border: 'none',
-                  borderRadius: '0.5rem',
-                  color: 'white',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
-                }}
-              >
+              <button type="submit" className="submit-button">
                 Submit Protocol Inquiry
               </button>
             </form>
           ) : (
-            <div style={{
-              background: 'rgba(16, 185, 129, 0.1)',
-              padding: '2rem',
-              borderRadius: '1rem',
-              border: '1px solid rgba(16, 185, 129, 0.2)',
-              textAlign: 'center'
-            }}>
-              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>✓</div>
-              <h3 style={{ color: '#10b981', marginBottom: '0.5rem' }}>Inquiry Received</h3>
-              <p style={{ color: '#6ee7b7' }}>Protocol support will respond within 24-48 hours</p>
+            <div className="success-card">
+              <div className="success-icon">✓</div>
+              <h3>Inquiry Received</h3>
+              <p>Protocol support will respond within 24-48 hours</p>
             </div>
           )}
 
-          <div style={{
-            marginTop: '2rem',
-            padding: '1rem',
-            background: 'rgba(255, 255, 255, 0.03)',
-            borderRadius: '0.75rem',
-            textAlign: 'center'
-          }}>
-            <p style={{ color: '#9ca3af', fontSize: '0.875rem', margin: 0 }}>
-              For immediate technical support, consult the protocol documentation
-            </p>
+          <div className="info-note">
+            <p>For immediate technical support, consult the protocol documentation</p>
           </div>
         </div>
       )}
