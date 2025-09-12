@@ -9,9 +9,6 @@ import { mainnet, sepolia, polygon, arbitrum, optimism } from 'viem/chains';
 import { injected, walletConnect, coinbaseWallet } from 'wagmi/connectors';
 import { ethers } from 'ethers';
 import FYTSContract from './contracts/FYTSFitnessToken.json';
-import LegalDisclaimer from './components/Legaldisclaimer';
-import StakingDashboard from './components/StakingDashboard';
-import LeaderboardsDashboard from './components/LeaderboardsDashboard';
 
 const CONTRACT_ADDRESS = '0x2955128a2ef2c7038381a5F56bcC21A91889595B';
 const SEPOLIA_CHAIN_ID = 11155111;
