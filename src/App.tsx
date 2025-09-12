@@ -1,7 +1,20 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+
+// Type declarations
+interface GPSPosition {
+  lat: number;
+  lon: number;
+  time: number;
+}
+
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}
 
 // Contract ABI for your deployed contract
-const CONTRACT_ABI = [
+const CONTRACT_ABI: any[] = [
   {
     "inputs": [{"internalType": "address", "name": "account", "type": "address"}],
     "name": "balanceOf",
@@ -42,15 +55,24 @@ const SEPOLIA_CHAIN_HEX = '0xaa36a7';
 
 // CONVERSION RATE: Base reward is 10 FYTS + (distance/100) FYTS
 // So approximately: 100m = 11 FYTS, 1000m = 20 FYTS, 5000m = 60 FYTS
-const calculateExpectedFYTS = (distanceMeters) => {
+const calculateExpectedFYTS = (distanceMeters: number): number => {
   const baseReward = 10;
   const distanceReward = distanceMeters / 100;
   return baseReward + distanceReward;
 };
 
+// Helper function to convert string to hex for encoding
+const stringToHex = (str: string): string => {
+  let hex = '';
+  for (let i = 0; i < str.length; i++) {
+    hex += str.charCodeAt(i).toString(16).padStart(2, '0');
+  }
+  return hex;
+};
+
 export default function App() {
   // GPS & Run State
-  const [runState, setRunState] = useState('idle');
+  const [runState, setRunState] = useState<'idle' | 'running' | 'stopped'>('idle');
   const [distance, setDistance] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [currentSpeed, setCurrentSpeed] = useState(0);
@@ -58,24 +80,24 @@ export default function App() {
   const [gpsAccuracy, setGpsAccuracy] = useState(0);
   
   // Wallet State
-  const [account, setAccount] = useState(null);
+  const [account, setAccount] = useState<string | null>(null);
   const [balance, setBalance] = useState('0');
   const [isValidator, setIsValidator] = useState(false);
-  const [chainId, setChainId] = useState(null);
+  const [chainId, setChainId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [txHash, setTxHash] = useState(null);
+  const [txHash, setTxHash] = useState<string | null>(null);
   
   // Refs for tracking
-  const watchIdRef = useRef(null);
-  const lastPositionRef = useRef(null);
-  const startTimeRef = useRef(null);
-  const timerRef = useRef(null);
+  const watchIdRef = useRef<number | null>(null);
+  const lastPositionRef = useRef<GPSPosition | null>(null);
+  const startTimeRef = useRef<number | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const positionCount = useRef(0);
 
   // Web3 Helper Functions
-  const toHex = (num) => '0x' + num.toString(16);
+  const toHex = (num: number): string => '0x' + num.toString(16);
   
-  const fromWei = (wei) => {
+  const fromWei = (wei: string): string => {
     const weiString = wei.toString();
     if (weiString === '0x0' || weiString === '0') return '0.0';
     
@@ -95,7 +117,7 @@ export default function App() {
   };
 
   // Connect Wallet
-  const connectWallet = async () => {
+  const connectWallet = async (): Promise<void> => {
     if (!window.ethereum) {
       alert('Please install MetaMask!');
       return;
@@ -128,7 +150,7 @@ export default function App() {
   };
 
   // Update balance
-  const updateBalance = async (address) => {
+  const updateBalance = async (address: string): Promise<void> => {
     try {
       const balanceCall = await window.ethereum.request({
         method: 'eth_call',
@@ -145,7 +167,7 @@ export default function App() {
   };
 
   // Check validator status
-  const checkValidatorStatus = async (address) => {
+  const checkValidatorStatus = async (address: string): Promise<void> => {
     try {
       const validatorCall = await window.ethereum.request({
         method: 'eth_call',
@@ -163,7 +185,7 @@ export default function App() {
   };
 
   // Switch to Sepolia
-  const switchToSepolia = async () => {
+  const switchToSepolia = async (): Promise<void> => {
     try {
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
@@ -177,7 +199,7 @@ export default function App() {
   };
 
   // Calculate distance between GPS points
-  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
     const R = 6371000; // Earth radius in meters
     const φ1 = lat1 * Math.PI / 180;
     const φ2 = lat2 * Math.PI / 180;
@@ -193,7 +215,7 @@ export default function App() {
   };
 
   // Handle GPS position updates
-  const handleGPSUpdate = useCallback((position) => {
+  const handleGPSUpdate = useCallback((position: GeolocationPosition) => {
     const { latitude, longitude, accuracy, speed } = position.coords;
     positionCount.current++;
     
@@ -251,7 +273,7 @@ export default function App() {
   }, []);
 
   // Start GPS tracking
-  const startGPSTracking = () => {
+  const startGPSTracking = (): void => {
     if (!navigator.geolocation) {
       alert('GPS not supported on this device!');
       return;
@@ -293,14 +315,13 @@ export default function App() {
       {
         enableHighAccuracy: true,
         timeout: 5000,
-        maximumAge: 0,
-        distanceFilter: 1 // Update every meter
+        maximumAge: 0
       }
     );
   };
 
   // Start run
-  const startRun = () => {
+  const startRun = (): void => {
     setRunState('running');
     setDistance(0);
     setElapsedTime(0);
@@ -312,22 +333,24 @@ export default function App() {
     
     // Timer
     timerRef.current = setInterval(() => {
-      setElapsedTime(Math.floor((Date.now() - startTimeRef.current) / 1000));
+      if (startTimeRef.current) {
+        setElapsedTime(Math.floor((Date.now() - startTimeRef.current) / 1000));
+      }
     }, 1000);
   };
 
   // Stop run
-  const stopRun = () => {
+  const stopRun = (): void => {
     setRunState('stopped');
     
     // Clear GPS
-    if (watchIdRef.current) {
+    if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
     
     // Clear timer
-    if (timerRef.current) {
+    if (timerRef.current !== null) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
@@ -337,7 +360,7 @@ export default function App() {
   };
 
   // Submit to blockchain
-  const submitToBlockchain = async () => {
+  const submitToBlockchain = async (): Promise<void> => {
     if (!account) {
       alert('Please connect wallet first!');
       return;
@@ -377,22 +400,24 @@ export default function App() {
       })}`;
       
       // Encode function call for submitValidation
-      // Function signature: submitValidation(uint256,uint256,string)
       const functionSig = '0xf09cc9b3'; // submitValidation signature
       
-      // For complex encoding, we'll use eth_sendTransaction directly
+      // Encode the parameters
+      const proofDataHex = stringToHex(proofData);
+      const data = functionSig + 
+                  distanceInt.toString(16).padStart(64, '0') +
+                  durationInt.toString(16).padStart(64, '0') +
+                  '0000000000000000000000000000000000000000000000000000000000000060' + // offset for string
+                  Math.floor(proofData.length / 2).toString(16).padStart(64, '0') +
+                  proofDataHex.padEnd(Math.ceil(proofData.length / 32) * 64, '0');
+      
       const tx = await window.ethereum.request({
         method: 'eth_sendTransaction',
         params: [{
           from: account,
           to: CONTRACT_ADDRESS,
           gas: toHex(300000),
-          data: functionSig + 
-                distanceInt.toString(16).padStart(64, '0') +
-                durationInt.toString(16).padStart(64, '0') +
-                '0000000000000000000000000000000000000000000000000000000000000060' + // offset for string
-                toHex(proofData.length).slice(2).padStart(64, '0') +
-                Buffer.from(proofData).toString('hex').padEnd(Math.ceil(proofData.length / 32) * 64, '0')
+          data: data
         }]
       });
       
@@ -424,7 +449,7 @@ export default function App() {
         alert('Transaction failed! Check if you have enough ETH for gas.');
       }
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Submit error:', error);
       if (error.code === 4001) {
         alert('Transaction cancelled');
@@ -439,7 +464,7 @@ export default function App() {
   };
 
   // Format time
-  const formatTime = (seconds) => {
+  const formatTime = (seconds: number): string => {
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
@@ -451,7 +476,7 @@ export default function App() {
   };
 
   // Calculate pace
-  const calculatePace = () => {
+  const calculatePace = (): string => {
     if (distance === 0) return '--:--';
     const kmDistance = distance / 1000;
     if (kmDistance === 0) return '--:--';
@@ -480,7 +505,7 @@ export default function App() {
   // Listen for account changes
   useEffect(() => {
     if (window.ethereum) {
-      window.ethereum.on('accountsChanged', (accounts) => {
+      window.ethereum.on('accountsChanged', (accounts: string[]) => {
         if (accounts.length > 0) {
           setAccount(accounts[0]);
           updateBalance(accounts[0]);
@@ -490,7 +515,7 @@ export default function App() {
         }
       });
       
-      window.ethereum.on('chainChanged', (chainId) => {
+      window.ethereum.on('chainChanged', (chainId: string) => {
         setChainId(parseInt(chainId, 16));
       });
     }
