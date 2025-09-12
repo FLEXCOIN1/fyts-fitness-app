@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>FYTS Admin Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        h1 { 
+            margin: 0 0 20px 0;
+            color: #333;
+        }
+        button {
+            padding: 12px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .connect { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .refresh { background: #2196F3; color: white; }
+        .approve { background: #4CAF50; color: white; }
+        .reject { background: #f44336; color: white; }
+        .make-validator { background: #FF9800; color: white; }
+        
+        .validation-item {
+            padding: 15px;
+            margin: 15px 0;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+        .validation-item strong {
+            color: #667eea;
+            font-size: 18px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .stat {
+            padding: 5px;
+            background: white;
+            border-radius: 5px;
+        }
+        .locked {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        .error {
+            color: red;
+            padding: 10px;
+            background: #ffebee;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .success {
+            color: green;
+            padding: 10px;
+            background: #e8f5e9;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔑 FYTS Admin Dashboard</h1>
+        <div id="wallet-info" style="margin-bottom: 20px;">
+            <button class="connect" onclick="connectWallet()">Connect Owner Wallet</button>
+        </div>
+        <div id="status"></div>
+    </div>
+    
+    <div class="container" id="admin-panel" style="display: none;">
+        <h2>Quick Actions</h2>
+        <div style="margin-bottom: 20px;">
+            <input type="text" id="validator-address" placeholder="Address to make validator" style="padding: 10px; width: 60%; border-radius: 5px; border: 1px solid #ddd;">
+            <button class="make-validator" onclick="makeValidator()">Make Validator</button>
+        </div>
+        
+        <h2>Pending Validations</h2>
+        <button class="refresh" onclick="loadValidations()">Refresh List</button>
+        <div id="validations">Loading...</div>
+    </div>
+
+    <script>
+        const CONTRACT = '0x2955128a2ef2c7038381a5F56bcC21A91889595B';
+        const OWNER = '0xcc1bb5fe5cf57eeee54792445586d3379e287d47';
+        let account = null;
+        let validationCount = 0;
+
+        async function connectWallet() {
+            if (!window.ethereum) {
+                showError('Please install MetaMask!');
+                return;
+            }
+            
+            try {
+                const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
+                account = accounts[0];
+                
+                if (account.toLowerCase() !== OWNER.toLowerCase()) {
+                    showError('Connected wallet is not the contract owner!');
+                    account = null;
+                    return;
+                }
+                
+                document.getElementById('wallet-info').innerHTML = `
+                    <div class="success">
+                        ✅ Connected as owner: ${account.slice(0,6)}...${account.slice(-4)}
+                    </div>
+                `;
+                document.getElementById('admin-panel').style.display = 'block';
+                showSuccess('Connected successfully!');
+                loadValidations();
+            } catch (error) {
+                showError('Connection failed: ' + error.message);
+            }
+        }
+
+        async function loadValidations() {
+            if (!account) {
+                showError('Connect wallet first!');
+                return;
+            }
+            
+            try {
+                // Get validation counter
+                const counterData = await ethereum.request({
+                    method: 'eth_call',
+                    params: [{
+                        to: CONTRACT,
+                        data: '0xf4a5b78b' // validationCounter()
+                    }, 'latest']
+                });
+                
+                validationCount = parseInt(counterData, 16);
+                
+                let html = `<div>Total validations submitted: ${validationCount}</div>`;
+                
+                // Get each validation details (showing last 10)
+                const start = Math.max(0, validationCount - 10);
+                for (let i = validationCount - 1; i >= start; i--) {
+                    // This is simplified - in production you'd decode the validation data
+                    html += `
+                        <div class="validation-item">
+                            <strong>Validation #${i}</strong>
+                            <div class="stats">
+                                <div class="stat">Status: Pending</div>
+                                <div class="stat">Expected: ~10-50 FYTS</div>
+                            </div>
+                            <button class="approve" onclick="approveValidation(${i})">Approve & Mint</button>
+                            <button class="reject" onclick="rejectValidation(${i})">Reject</button>
+                        </div>
+                    `;
+                }
+                
+                document.getElementById('validations').innerHTML = html || '<div>No validations found</div>';
+            } catch (error) {
+                showError('Failed to load validations: ' + error.message);
+            }
+        }
+
+        async function makeValidator() {
+            const address = document.getElementById('validator-address').value;
+            if (!address) {
+                showError('Enter an address first!');
+                return;
+            }
+            
+            try {
+                const tx = await ethereum.request({
+                    method: 'eth_sendTransaction',
+                    params: [{
+                        from: account,
+                        to: CONTRACT,
+                        data: '0x70480275' + address.slice(2).padStart(64, '0')
+                    }]
+                });
+                showSuccess('Making validator... TX: ' + tx.slice(0,10));
+                document.getElementById('validator-address').value = '';
+            } catch (error) {
+                showError('Failed: ' + error.message);
+            }
+        }
+
+        async function approveValidation(id) {
+            if (!account) return;
+            
+            try {
+                const tx = await ethereum.request({
+                    method: 'eth_sendTransaction',
+                    params: [{
+                        from: account,
+                        to: CONTRACT,
+                        data: '0x14e55c81' + id.toString(16).padStart(64, '0')
+                    }]
+                });
+                showSuccess(`Approving validation #${id}... TX: ${tx.slice(0,10)}`);
+                setTimeout(loadValidations, 5000);
+            } catch (error) {
+                showError('Approval failed: ' + error.message);
+            }
+        }
+
+        async function rejectValidation(id) {
+            if (!account) return;
+            
+            try {
+                const tx = await ethereum.request({
+                    method: 'eth_sendTransaction',
+                    params: [{
+                        from: account,
+                        to: CONTRACT,
+                        data: '0xf7fed02c' + id.toString(16).padStart(64, '0')
+                    }]
+                });
+                showSuccess(`Rejecting validation #${id}... TX: ${tx.slice(0,10)}`);
+                setTimeout(loadValidations, 5000);
+            } catch (error) {
+                showError('Rejection failed: ' + error.message);
+            }
+        }
+
+        function showError(msg) {
+            document.getElementById('status').innerHTML = `<div class="error">${msg}</div>`;
+        }
+
+        function showSuccess(msg) {
+            document.getElementById('status').innerHTML = `<div class="success">${msg}</div>`;
+        }
+
+        // Auto-connect if possible
+        window.addEventListener('load', () => {
+            if (window.ethereum) {
+                ethereum.request({ method: 'eth_accounts' }).then(accounts => {
+                    if (accounts.length > 0 && accounts[0].toLowerCase() === OWNER.toLowerCase()) {
+                        account = accounts[0];
+                        connectWallet();
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
