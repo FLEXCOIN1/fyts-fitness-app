@@ -1,8 +1,7 @@
 import { useRunTracker } from './useRunTracker';
 import './App.css';
 import { useState, useEffect } from 'react';
-import { WalletConnect } from './components/WalletConnect';
-import { useAccount, WagmiProvider, createConfig } from 'wagmi';
+import { useAccount, useConnect, useDisconnect, WagmiProvider, createConfig } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http } from 'viem';
 import { mainnet, sepolia, polygon, arbitrum, optimism } from 'viem/chains';
@@ -45,6 +44,8 @@ const queryClient = new QueryClient();
 function AppContent() {
   const { state, stats, formattedStats, start, pause, resume, end, discard, addDistance } = useRunTracker();
   const { isConnected, address, chain } = useAccount();
+  const { connect, connectors } = useConnect();
+  const { disconnect } = useDisconnect();
   const [validationResult, setValidationResult] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [contractBalance, setContractBalance] = useState('0');
@@ -153,13 +154,49 @@ function AppContent() {
         
         {isConnected ? (
           <div style={{marginTop: '10px'}}>
+            <div>Wallet: {address?.slice(0, 6)}...{address?.slice(-4)}</div>
             <div>Balance: {parseFloat(contractBalance).toFixed(2)} FYTS</div>
             {chain?.id !== SEPOLIA_CHAIN_ID && (
               <div style={{color: 'red'}}>⚠️ Switch to Sepolia Network!</div>
             )}
+            <button 
+              onClick={() => disconnect()}
+              style={{
+                marginTop: '10px',
+                padding: '8px 16px',
+                background: '#ff4444',
+                color: 'white',
+                border: 'none',
+                borderRadius: '5px',
+                cursor: 'pointer'
+              }}
+            >
+              Disconnect
+            </button>
           </div>
         ) : (
-          <WalletConnect />
+          <div style={{marginTop: '10px'}}>
+            <p>Connect your wallet to start earning FYTS tokens!</p>
+            <div style={{display: 'flex', gap: '10px', flexWrap: 'wrap'}}>
+              {connectors.map((connector) => (
+                <button
+                  key={connector.id}
+                  onClick={() => connect({ connector })}
+                  style={{
+                    padding: '10px 20px',
+                    background: '#667eea',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '1rem'
+                  }}
+                >
+                  {connector.name}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 
