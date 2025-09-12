@@ -48,7 +48,6 @@ function AppContent() {
   const [validationResult, setValidationResult] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [contractBalance, setContractBalance] = useState('0');
-  const [activeTab, setActiveTab] = useState<string>('tracker');
   const [debugClicks, setDebugClicks] = useState(0);
 
   useEffect(() => {
@@ -138,168 +137,43 @@ function AppContent() {
     setDebugClicks(prev => prev + 1);
   };
 
-  // Vibrant Smash style inline CSS
-  const styles = {
-    container: {
+  return (
+    <div style={{
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       minHeight: '100vh',
-      padding: '10px',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      overflowX: 'hidden' as const
-    },
-    header: {
-      background: 'linear-gradient(135deg, #fff 0%, #f0f0f0 100%)',
-      borderRadius: '25px',
-      padding: '20px',
-      marginBottom: '20px',
-      boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
-      textAlign: 'center' as const
-    },
-    title: {
-      background: 'linear-gradient(45deg, #f093fb 0%, #f5576c 100%)',
-      WebkitBackgroundClip: 'text',
-      WebkitTextFillColor: 'transparent',
-      backgroundClip: 'text',
-      fontSize: 'clamp(2rem, 5vw, 3rem)',
-      fontWeight: '900',
-      margin: '0',
-      letterSpacing: '-1px'
-    },
-    subtitle: {
-      fontSize: '1rem',
-      color: '#666',
-      marginTop: '5px'
-    },
-    balanceBox: {
-      background: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
-      borderRadius: '15px',
-      padding: '12px',
-      marginTop: '10px',
-      fontSize: '1.1rem',
-      fontWeight: 'bold',
-      color: '#5f27cd',
-      display: 'inline-block'
-    },
-    mainCard: {
-      background: 'rgba(255, 255, 255, 0.95)',
-      borderRadius: '25px',
-      padding: '20px',
-      marginBottom: '20px',
-      boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
-    },
-    distanceDisplay: {
-      fontSize: 'clamp(3rem, 8vw, 4rem)',
-      fontWeight: '900',
-      background: 'linear-gradient(45deg, #FFD700, #FFA500)',
-      WebkitBackgroundClip: 'text',
-      WebkitTextFillColor: 'transparent',
-      backgroundClip: 'text',
-      textAlign: 'center' as const,
-      margin: '20px 0'
-    },
-    startButton: {
-      background: 'linear-gradient(45deg, #FA8BFF 0%, #2BD2FF 52%, #2BFF88 100%)',
-      border: 'none',
-      borderRadius: '50px',
-      padding: '20px 40px',
-      fontSize: 'clamp(1.5rem, 4vw, 2rem)',
-      color: 'white',
-      fontWeight: 'bold',
-      cursor: 'pointer',
-      boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
-      width: '100%',
-      marginTop: '20px',
-      animation: 'pulse 2s infinite'
-    },
-    buttonGroup: {
-      display: 'flex',
-      justifyContent: 'center',
-      gap: '15px',
-      marginTop: '20px',
-      flexWrap: 'wrap' as const
-    },
-    actionButton: {
-      background: 'linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%)',
-      border: 'none',
-      borderRadius: '20px',
-      padding: '15px 25px',
-      fontSize: '1.2rem',
-      cursor: 'pointer',
-      boxShadow: '0 8px 20px rgba(0,0,0,0.2)',
-      color: 'white',
-      fontWeight: 'bold',
-      minWidth: '120px'
-    },
-    debugButton: {
-      position: 'fixed' as const,
-      bottom: '20px',
-      right: '20px',
-      background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-      border: 'none',
-      borderRadius: '20px',
-      padding: '12px 20px',
-      color: 'white',
-      fontSize: '1rem',
-      fontWeight: 'bold',
-      cursor: 'pointer',
-      boxShadow: '0 8px 20px rgba(0,0,0,0.3)',
-      zIndex: 1000
-    },
-    statGrid: {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
-      gap: '10px',
-      marginTop: '20px'
-    },
-    statCard: {
-      background: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
-      borderRadius: '15px',
-      padding: '15px',
-      textAlign: 'center' as const,
-      boxShadow: '0 5px 15px rgba(0,0,0,0.1)'
-    },
-    statValue: {
-      fontSize: '1.5rem',
-      fontWeight: 'bold',
-      color: '#5f27cd'
-    },
-    statLabel: {
-      fontSize: '0.8rem',
-      color: '#666',
-      marginTop: '3px'
-    },
-    completionCard: {
-      background: 'linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)',
-      borderRadius: '20px',
-      padding: '25px',
-      textAlign: 'center' as const,
-      color: 'white',
-      marginTop: '20px'
-    }
-  };
-
-  return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <h1 style={styles.title}>VIBRANT SMASH FITNESS</h1>
-        <p style={styles.subtitle}>Move to Earn Power Gems!</p>
+      padding: '20px'
+    }}>
+      <div style={{
+        background: 'white',
+        borderRadius: '15px',
+        padding: '20px',
+        marginBottom: '20px'
+      }}>
+        <h1 style={{fontSize: '2rem', margin: '0'}}>FYTS Fitness Tracker</h1>
         
         {isConnected ? (
-          <div style={styles.balanceBox}>
-            Power Gems: {parseFloat(contractBalance).toFixed(2)} FYTS
+          <div style={{marginTop: '10px'}}>
+            <div>Balance: {parseFloat(contractBalance).toFixed(2)} FYTS</div>
             {chain?.id !== SEPOLIA_CHAIN_ID && (
-              <div style={{color: 'red', marginTop: '5px', fontSize: '0.9rem'}}>Switch to Sepolia!</div>
+              <div style={{color: 'red'}}>⚠️ Switch to Sepolia Network!</div>
             )}
           </div>
         ) : (
-          <div style={{marginTop: '10px'}}>
-            <WalletConnect />
-          </div>
+          <WalletConnect />
         )}
       </div>
 
-      <div style={styles.mainCard}>
-        <div style={styles.distanceDisplay}>
+      <div style={{
+        background: 'white',
+        borderRadius: '15px',
+        padding: '20px'
+      }}>
+        <div style={{
+          fontSize: '3rem',
+          fontWeight: 'bold',
+          textAlign: 'center',
+          marginBottom: '20px'
+        }}>
           {stats.distanceMeters.toFixed(0)}m
           {debugClicks > 0 && (
             <div style={{fontSize: '1rem', color: '#666'}}>
@@ -308,69 +182,132 @@ function AppContent() {
           )}
         </div>
         
-        <div style={styles.statGrid}>
-          <div style={styles.statCard}>
-            <div style={styles.statValue}>{formattedStats.duration}</div>
-            <div style={styles.statLabel}>Time</div>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr 1fr',
+          gap: '10px',
+          marginBottom: '20px'
+        }}>
+          <div style={{textAlign: 'center'}}>
+            <div style={{fontSize: '1.5rem', fontWeight: 'bold'}}>
+              {formattedStats.duration}
+            </div>
+            <div style={{fontSize: '0.8rem', color: '#666'}}>Time</div>
           </div>
-          <div style={styles.statCard}>
-            <div style={styles.statValue}>{formattedStats.pace}</div>
-            <div style={styles.statLabel}>Pace</div>
+          <div style={{textAlign: 'center'}}>
+            <div style={{fontSize: '1.5rem', fontWeight: 'bold'}}>
+              {formattedStats.pace}
+            </div>
+            <div style={{fontSize: '0.8rem', color: '#666'}}>Pace</div>
           </div>
-          <div style={styles.statCard}>
-            <div style={styles.statValue}>{formattedStats.currentSpeed}</div>
-            <div style={styles.statLabel}>Speed</div>
+          <div style={{textAlign: 'center'}}>
+            <div style={{fontSize: '1.5rem', fontWeight: 'bold'}}>
+              {formattedStats.currentSpeed}
+            </div>
+            <div style={{fontSize: '0.8rem', color: '#666'}}>Speed</div>
           </div>
         </div>
 
         {state === 'idle' && (
-          <button onClick={start} style={styles.startButton}>
-            START POWER RUN!
+          <button onClick={start} style={{
+            background: '#667eea',
+            color: 'white',
+            border: 'none',
+            borderRadius: '10px',
+            padding: '15px',
+            fontSize: '1.2rem',
+            width: '100%',
+            cursor: 'pointer'
+          }}>
+            START RUN
           </button>
         )}
         
         {(state === 'running' || state === 'stationary') && (
-          <div style={styles.buttonGroup}>
-            <button onClick={pause} style={styles.actionButton}>PAUSE</button>
-            <button onClick={handleRunEnd} style={{...styles.actionButton, 
-              background: 'linear-gradient(135deg, #f5576c 0%, #f093fb 100%)'}} 
-              disabled={isSubmitting}>
+          <div style={{display: 'flex', gap: '10px'}}>
+            <button onClick={pause} style={{
+              background: '#ffa500',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '15px',
+              fontSize: '1.2rem',
+              flex: 1,
+              cursor: 'pointer'
+            }}>
+              PAUSE
+            </button>
+            <button onClick={handleRunEnd} style={{
+              background: '#ff4444',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '15px',
+              fontSize: '1.2rem',
+              flex: 1,
+              cursor: 'pointer'
+            }} disabled={isSubmitting}>
               {isSubmitting ? 'SENDING...' : 'FINISH'}
             </button>
           </div>
         )}
         
         {state === 'paused' && (
-          <div style={styles.buttonGroup}>
-            <button onClick={resume} style={styles.actionButton}>RESUME</button>
-            <button onClick={handleRunEnd} style={{...styles.actionButton,
-              background: 'linear-gradient(135deg, #f5576c 0%, #f093fb 100%)'}}>
+          <div style={{display: 'flex', gap: '10px'}}>
+            <button onClick={resume} style={{
+              background: '#4CAF50',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '15px',
+              fontSize: '1.2rem',
+              flex: 1,
+              cursor: 'pointer'
+            }}>
+              RESUME
+            </button>
+            <button onClick={handleRunEnd} style={{
+              background: '#ff4444',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '15px',
+              fontSize: '1.2rem',
+              flex: 1,
+              cursor: 'pointer'
+            }}>
               FINISH
             </button>
           </div>
         )}
         
         {state === 'ended' && (
-          <div style={styles.completionCard}>
-            <h2 style={{margin: '0 0 15px 0'}}>Power Run Complete!</h2>
-            <p style={{fontSize: '1.2rem'}}>
-              Distance: {stats.distanceMeters.toFixed(0)}m
-            </p>
+          <div style={{
+            background: '#e8f5e9',
+            borderRadius: '10px',
+            padding: '20px',
+            textAlign: 'center'
+          }}>
+            <h2>Run Complete!</h2>
+            <p>Distance: {stats.distanceMeters.toFixed(0)}m</p>
             {validationResult && (
-              <div style={{marginTop: '15px', fontSize: '1.5rem', fontWeight: 'bold'}}>
+              <div style={{fontSize: '1.5rem', fontWeight: 'bold', color: '#4CAF50'}}>
                 +{validationResult.tokens} FYTS earned!
               </div>
-            )}
-            {stats.distanceMeters < 100 && (
-              <p style={{marginTop: '10px', color: '#ffeb3b'}}>
-                Need 100m minimum to earn gems!
-              </p>
             )}
             <button onClick={() => {
               discard();
               setValidationResult(null);
               setDebugClicks(0);
-            }} style={{...styles.startButton, marginTop: '15px', padding: '15px 30px'}}>
+            }} style={{
+              background: '#667eea',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '10px 20px',
+              marginTop: '15px',
+              cursor: 'pointer'
+            }}>
               NEW RUN
             </button>
           </div>
@@ -378,18 +315,24 @@ function AppContent() {
       </div>
 
       {state === 'running' && (
-        <button onClick={handleDebugClick} style={styles.debugButton}>
-          +100m TEST
+        <button onClick={handleDebugClick} style={{
+          position: 'fixed',
+          bottom: '20px',
+          right: '20px',
+          background: '#ff4444',
+          color: 'white',
+          border: 'none',
+          borderRadius: '50%',
+          width: '60px',
+          height: '60px',
+          fontSize: '0.9rem',
+          fontWeight: 'bold',
+          cursor: 'pointer',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+        }}>
+          +100m
         </button>
       )}
-
-      <style>{`
-        @keyframes pulse {
-          0% { transform: scale(1); }
-          50% { transform: scale(1.05); }
-          100% { transform: scale(1); }
-        }
-      `}</style>
     </div>
   );
 }
