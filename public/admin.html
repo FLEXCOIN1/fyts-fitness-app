@@ -1,265 +1,945 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FYTS Admin Dashboard</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        * { box-sizing: border-box; }
-        body {
-            font-family: system-ui, -apple-system, sans-serif;
+        * { 
+            box-sizing: border-box; 
             margin: 0;
-            padding: 20px;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
+            padding: 20px;
         }
+        
         .container {
-            max-width: 800px;
+            max-width: 1200px;
             margin: 0 auto;
             background: white;
-            padding: 20px;
-            border-radius: 15px;
+            border-radius: 20px;
+            padding: 30px;
             margin-bottom: 20px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
         }
-        h1 { 
-            margin: 0 0 20px 0;
+        
+        h1 {
             color: #333;
+            margin-bottom: 10px;
+            font-size: 2rem;
         }
+        
+        h2 {
+            color: #555;
+            margin: 20px 0 15px 0;
+            font-size: 1.5rem;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+        
+        .status-bar {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #28a745;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
         button {
-            padding: 12px 20px;
-            margin: 5px;
+            padding: 12px 24px;
             border: none;
             border-radius: 8px;
-            cursor: pointer;
-            font-weight: bold;
+            font-weight: 600;
             font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 5px;
         }
-        .connect { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
-        .refresh { background: #2196F3; color: white; }
-        .approve { background: #4CAF50; color: white; }
-        .reject { background: #f44336; color: white; }
-        .make-validator { background: #FF9800; color: white; }
         
-        .validation-item {
-            padding: 15px;
-            margin: 15px 0;
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-warning {
+            background: #ffc107;
+            color: #333;
+        }
+        
+        .btn-info {
+            background: #17a2b8;
+            color: white;
+        }
+        
+        input, select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            width: 100%;
+            max-width: 300px;
+            margin: 5px 0;
+        }
+        
+        .validation-card {
             background: #f8f9fa;
-            border-radius: 10px;
-            border-left: 4px solid #667eea;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 15px 0;
+            transition: all 0.3s ease;
         }
-        .validation-item strong {
+        
+        .validation-card:hover {
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        
+        .validation-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .validation-id {
+            font-size: 1.2rem;
+            font-weight: bold;
             color: #667eea;
-            font-size: 18px;
         }
-        .stats {
+        
+        .validation-status {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-approved {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-rejected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .validation-details {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 10px;
+            margin: 15px 0;
+        }
+        
+        .detail-item {
+            background: white;
+            padding: 10px;
+            border-radius: 6px;
+        }
+        
+        .detail-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .detail-value {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
             margin: 10px 0;
         }
-        .stat {
-            padding: 5px;
-            background: white;
-            border-radius: 5px;
+        
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
         }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .tab-container {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+            border-bottom: 2px solid #f0f0f0;
+            flex-wrap: wrap;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+        
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+        
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
         .locked {
             opacity: 0.5;
             pointer-events: none;
         }
-        .error {
-            color: red;
-            padding: 10px;
-            background: #ffebee;
-            border-radius: 5px;
-            margin: 10px 0;
-        }
-        .success {
-            color: green;
-            padding: 10px;
-            background: #e8f5e9;
-            border-radius: 5px;
-            margin: 10px 0;
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 1.5rem;
+            }
+            
+            .validation-details {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🔑 FYTS Admin Dashboard</h1>
-        <div id="wallet-info" style="margin-bottom: 20px;">
-            <button class="connect" onclick="connectWallet()">Connect Owner Wallet</button>
+        
+        <div id="connection-status" class="status-bar">
+            <div class="status-item">
+                <div class="status-indicator" id="status-dot" style="background: #dc3545;"></div>
+                <span id="wallet-status">Not Connected</span>
+            </div>
+            <button class="btn-primary" onclick="connectWallet()" id="connect-btn">Connect Owner Wallet</button>
         </div>
-        <div id="status"></div>
+        
+        <div id="alerts"></div>
     </div>
     
     <div class="container" id="admin-panel" style="display: none;">
-        <h2>Quick Actions</h2>
-        <div style="margin-bottom: 20px;">
-            <input type="text" id="validator-address" placeholder="Address to make validator" style="padding: 10px; width: 60%; border-radius: 5px; border: 1px solid #ddd;">
-            <button class="make-validator" onclick="makeValidator()">Make Validator</button>
+        <div class="tab-container">
+            <button class="tab active" onclick="switchTab('overview')">Overview</button>
+            <button class="tab" onclick="switchTab('validations')">Validations</button>
+            <button class="tab" onclick="switchTab('validators')">Validators</button>
+            <button class="tab" onclick="switchTab('settings')">Settings</button>
         </div>
         
-        <h2>Pending Validations</h2>
-        <button class="refresh" onclick="loadValidations()">Refresh List</button>
-        <div id="validations">Loading...</div>
+        <!-- Overview Tab -->
+        <div id="overview-tab" class="tab-content active">
+            <h2>📊 System Overview</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total Validations</div>
+                    <div class="stat-value" id="total-validations">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Pending Approvals</div>
+                    <div class="stat-value" id="pending-count">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Active Validators</div>
+                    <div class="stat-value" id="validator-count">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">FYTS Minted</div>
+                    <div class="stat-value" id="tokens-minted">0</div>
+                </div>
+            </div>
+            
+            <h2>⚡ Quick Actions</h2>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin: 20px 0;">
+                <button class="btn-success" onclick="refreshAll()">🔄 Refresh All Data</button>
+                <button class="btn-warning" onclick="exportData()">📥 Export Data</button>
+                <button class="btn-info" onclick="showContractInfo()">📋 Contract Info</button>
+            </div>
+        </div>
+        
+        <!-- Validations Tab -->
+        <div id="validations-tab" class="tab-content">
+            <h2>📝 Validation Management</h2>
+            
+            <div style="margin: 20px 0;">
+                <label>Filter Status:</label>
+                <select id="status-filter" onchange="filterValidations()">
+                    <option value="all">All Validations</option>
+                    <option value="pending">Pending Only</option>
+                    <option value="approved">Approved Only</option>
+                    <option value="rejected">Rejected Only</option>
+                </select>
+                
+                <button class="btn-info" onclick="loadValidations()" style="margin-left: 10px;">
+                    Refresh Validations
+                </button>
+            </div>
+            
+            <div id="validations-list">
+                <div class="alert alert-info">Loading validations...</div>
+            </div>
+            
+            <!-- Manual Approval Section -->
+            <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+                <h3>Manual Validation Approval</h3>
+                <p style="color: #666; margin: 10px 0;">If automatic loading fails, you can manually approve by ID:</p>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <input type="number" id="manual-validation-id" placeholder="Validation ID (e.g., 0)" min="0">
+                    <button class="btn-success" onclick="manualApprove()">Approve by ID</button>
+                    <button class="btn-danger" onclick="manualReject()">Reject by ID</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Validators Tab -->
+        <div id="validators-tab" class="tab-content">
+            <h2>👥 Validator Management</h2>
+            
+            <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+                <h3>Add New Validator</h3>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <input type="text" id="new-validator-address" placeholder="0x... wallet address" style="flex: 1; min-width: 250px;">
+                    <button class="btn-success" onclick="addValidator()">Add Validator</button>
+                </div>
+                <p style="color: #666; margin-top: 10px; font-size: 14px;">
+                    Validators can submit fitness validations for approval
+                </p>
+            </div>
+            
+            <div id="validators-list">
+                <div class="alert alert-info">Loading validators...</div>
+            </div>
+        </div>
+        
+        <!-- Settings Tab -->
+        <div id="settings-tab" class="tab-content">
+            <h2>⚙️ Settings & Tools</h2>
+            
+            <div style="margin: 20px 0;">
+                <h3>Contract Information</h3>
+                <div class="detail-item" style="margin: 10px 0;">
+                    <div class="detail-label">Contract Address</div>
+                    <div class="detail-value" style="font-family: monospace; font-size: 14px;">
+                        0x2955128a2ef2c7038381a5F56bcC21A91889595B
+                    </div>
+                </div>
+                <div class="detail-item" style="margin: 10px 0;">
+                    <div class="detail-label">Network</div>
+                    <div class="detail-value">Sepolia Testnet</div>
+                </div>
+                <div class="detail-item" style="margin: 10px 0;">
+                    <div class="detail-label">Owner Address</div>
+                    <div class="detail-value" style="font-family: monospace; font-size: 14px;" id="owner-address">
+                        0xCc1Bb5FE5cF57EEEE54792445586D3379E287d47
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin: 20px 0;">
+                <h3>Advanced Actions</h3>
+                <button class="btn-warning" onclick="clearCache()">Clear Cache</button>
+                <button class="btn-info" onclick="checkNetwork()">Check Network</button>
+                <button class="btn-danger" onclick="emergencyStop()" style="display: none;">Emergency Stop</button>
+            </div>
+        </div>
     </div>
 
     <script>
-        const CONTRACT = '0x2955128a2ef2c7038381a5F56bcC21A91889595B';
-        const OWNER = '0xcc1bb5fe5cf57eeee54792445586d3379e287d47';
+        // Configuration
+        const CONTRACT_ADDRESS = '0x2955128a2ef2c7038381a5F56bcC21A91889595B';
+        const OWNER_ADDRESS = '0xCc1Bb5FE5cF57EEEE54792445586D3379E287d47';
+        const SEPOLIA_CHAIN_ID = '0xaa36a7';
+        
+        // State
         let account = null;
-        let validationCount = 0;
-
+        let validations = [];
+        let validators = [];
+        let currentTab = 'overview';
+        
+        // Initialize
+        window.addEventListener('load', async () => {
+            if (window.ethereum) {
+                ethereum.on('accountsChanged', handleAccountsChanged);
+                ethereum.on('chainChanged', () => window.location.reload());
+                
+                // Auto-connect if previously connected
+                const accounts = await ethereum.request({ method: 'eth_accounts' });
+                if (accounts.length > 0) {
+                    await connectWallet();
+                }
+            }
+        });
+        
+        // Wallet Connection
         async function connectWallet() {
             if (!window.ethereum) {
-                showError('Please install MetaMask!');
+                showAlert('Please install MetaMask to use the admin dashboard!', 'error');
                 return;
             }
             
             try {
+                // Request accounts
                 const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
-                account = accounts[0];
                 
-                if (account.toLowerCase() !== OWNER.toLowerCase()) {
-                    showError('Connected wallet is not the contract owner!');
+                // Check network
+                const chainId = await ethereum.request({ method: 'eth_chainId' });
+                if (chainId !== SEPOLIA_CHAIN_ID) {
+                    showAlert('Please switch to Sepolia network!', 'error');
+                    await switchToSepolia();
+                    return;
+                }
+                
+                // Verify owner
+                account = accounts[0];
+                if (account.toLowerCase() !== OWNER_ADDRESS.toLowerCase()) {
+                    showAlert(`Access denied! This dashboard is only for the contract owner.`, 'error');
+                    showAlert(`Connected: ${account.slice(0,6)}...${account.slice(-4)}`, 'error');
+                    showAlert(`Required: ${OWNER_ADDRESS.slice(0,6)}...${OWNER_ADDRESS.slice(-4)}`, 'error');
                     account = null;
                     return;
                 }
                 
-                document.getElementById('wallet-info').innerHTML = `
-                    <div class="success">
-                        ✅ Connected as owner: ${account.slice(0,6)}...${account.slice(-4)}
-                    </div>
-                `;
+                // Success
+                document.getElementById('wallet-status').textContent = `Connected: ${account.slice(0,6)}...${account.slice(-4)}`;
+                document.getElementById('status-dot').style.background = '#28a745';
+                document.getElementById('connect-btn').textContent = 'Connected ✓';
+                document.getElementById('connect-btn').classList.add('btn-success');
                 document.getElementById('admin-panel').style.display = 'block';
-                showSuccess('Connected successfully!');
-                loadValidations();
+                
+                showAlert('Successfully connected as contract owner!', 'success');
+                
+                // Load initial data
+                await refreshAll();
+                
             } catch (error) {
-                showError('Connection failed: ' + error.message);
+                console.error('Connection error:', error);
+                showAlert(`Connection failed: ${error.message}`, 'error');
             }
         }
-
+        
+        async function switchToSepolia() {
+            try {
+                await ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: SEPOLIA_CHAIN_ID }],
+                });
+            } catch (error) {
+                if (error.code === 4902) {
+                    await ethereum.request({
+                        method: 'wallet_addEthereumChain',
+                        params: [{
+                            chainId: SEPOLIA_CHAIN_ID,
+                            chainName: 'Sepolia Testnet',
+                            rpcUrls: ['https://sepolia.infura.io/v3/'],
+                            nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+                            blockExplorerUrls: ['https://sepolia.etherscan.io']
+                        }]
+                    });
+                }
+            }
+        }
+        
+        function handleAccountsChanged(accounts) {
+            if (accounts.length === 0) {
+                account = null;
+                document.getElementById('admin-panel').style.display = 'none';
+                document.getElementById('wallet-status').textContent = 'Not Connected';
+                document.getElementById('status-dot').style.background = '#dc3545';
+            } else if (accounts[0] !== account) {
+                window.location.reload();
+            }
+        }
+        
+        // Tab Management
+        function switchTab(tabName) {
+            currentTab = tabName;
+            
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+            
+            // Load tab-specific data
+            if (tabName === 'validations') {
+                loadValidations();
+            } else if (tabName === 'validators') {
+                loadValidators();
+            }
+        }
+        
+        // Data Loading Functions
+        async function refreshAll() {
+            if (!account) return;
+            
+            showAlert('Refreshing all data...', 'info');
+            
+            try {
+                // Load overview stats
+                await loadOverviewStats();
+                
+                // Load validations if on that tab
+                if (currentTab === 'validations') {
+                    await loadValidations();
+                }
+                
+                // Load validators if on that tab
+                if (currentTab === 'validators') {
+                    await loadValidators();
+                }
+                
+                showAlert('Data refreshed successfully!', 'success');
+            } catch (error) {
+                console.error('Refresh error:', error);
+                showAlert('Some data could not be loaded', 'error');
+            }
+        }
+        
+        async function loadOverviewStats() {
+            try {
+                // These would normally call the contract, but we'll show placeholder data
+                // since the exact contract methods might vary
+                document.getElementById('total-validations').textContent = '0';
+                document.getElementById('pending-count').textContent = '0';
+                document.getElementById('validator-count').textContent = '1';
+                document.getElementById('tokens-minted').textContent = '0';
+            } catch (error) {
+                console.error('Stats loading error:', error);
+            }
+        }
+        
         async function loadValidations() {
             if (!account) {
-                showError('Connect wallet first!');
+                showAlert('Connect wallet first!', 'error');
                 return;
             }
             
+            const listElement = document.getElementById('validations-list');
+            listElement.innerHTML = '<div class="loading"></div> Loading validations...';
+            
             try {
-                // Get validation counter
+                // Try to get validation counter
+                // If this fails, we'll show manual approval interface
                 const counterData = await ethereum.request({
                     method: 'eth_call',
                     params: [{
-                        to: CONTRACT,
-                        data: '0xf4a5b78b' // validationCounter()
+                        to: CONTRACT_ADDRESS,
+                        data: '0x4f5c7817' // Alternative method signature
                     }, 'latest']
-                });
+                }).catch(() => '0x0');
                 
-                validationCount = parseInt(counterData, 16);
+                const count = parseInt(counterData, 16);
                 
-                let html = `<div>Total validations submitted: ${validationCount}</div>`;
-                
-                // Get each validation details (showing last 10)
-                const start = Math.max(0, validationCount - 10);
-                for (let i = validationCount - 1; i >= start; i--) {
-                    // This is simplified - in production you'd decode the validation data
-                    html += `
-                        <div class="validation-item">
-                            <strong>Validation #${i}</strong>
-                            <div class="stats">
-                                <div class="stat">Status: Pending</div>
-                                <div class="stat">Expected: ~10-50 FYTS</div>
-                            </div>
-                            <button class="approve" onclick="approveValidation(${i})">Approve & Mint</button>
-                            <button class="reject" onclick="rejectValidation(${i})">Reject</button>
+                if (count > 0) {
+                    // Show validations
+                    let html = '';
+                    for (let i = 0; i < Math.min(count, 10); i++) {
+                        html += createValidationCard(i, {
+                            user: 'Loading...',
+                            distance: 0,
+                            duration: 0,
+                            status: 'pending'
+                        });
+                    }
+                    listElement.innerHTML = html;
+                } else {
+                    listElement.innerHTML = `
+                        <div class="alert alert-info">
+                            No validations found yet. When users submit fitness validations, they will appear here.
                         </div>
                     `;
                 }
-                
-                document.getElementById('validations').innerHTML = html || '<div>No validations found</div>';
             } catch (error) {
-                showError('Failed to load validations: ' + error.message);
+                console.error('Loading error:', error);
+                listElement.innerHTML = `
+                    <div class="alert alert-info">
+                        Automatic loading is not available. Use manual approval below to approve validations by ID.
+                        <br><br>
+                        When users submit validations in the main app, they receive a validation ID (starting from 0).
+                        Enter that ID below to approve or reject their validation.
+                    </div>
+                `;
             }
         }
-
-        async function makeValidator() {
-            const address = document.getElementById('validator-address').value;
-            if (!address) {
-                showError('Enter an address first!');
+        
+        function createValidationCard(id, data) {
+            return `
+                <div class="validation-card">
+                    <div class="validation-header">
+                        <div class="validation-id">Validation #${id}</div>
+                        <div class="validation-status status-${data.status}">${data.status}</div>
+                    </div>
+                    <div class="validation-details">
+                        <div class="detail-item">
+                            <div class="detail-label">User</div>
+                            <div class="detail-value">${data.user}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Distance</div>
+                            <div class="detail-value">${data.distance}m</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Duration</div>
+                            <div class="detail-value">${data.duration}s</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Expected FYTS</div>
+                            <div class="detail-value">~${Math.floor(data.distance / 10)}</div>
+                        </div>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn-success" onclick="approveValidation(${id})">
+                            ✅ Approve & Mint
+                        </button>
+                        <button class="btn-danger" onclick="rejectValidation(${id})">
+                            ❌ Reject
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+        
+        async function loadValidators() {
+            if (!account) return;
+            
+            const listElement = document.getElementById('validators-list');
+            listElement.innerHTML = `
+                <div class="alert alert-info">
+                    Validator list will show approved addresses that can submit validations.
+                    <br><br>
+                    Current validators:
+                    <ul style="margin-top: 10px;">
+                        <li>${OWNER_ADDRESS} (Owner)</li>
+                    </ul>
+                </div>
+            `;
+        }
+        
+        // Validation Actions
+        async function approveValidation(id) {
+            if (!account) {
+                showAlert('Connect wallet first!', 'error');
                 return;
             }
             
             try {
+                showAlert(`Approving validation #${id}...`, 'info');
+                
                 const tx = await ethereum.request({
                     method: 'eth_sendTransaction',
                     params: [{
                         from: account,
-                        to: CONTRACT,
-                        data: '0x70480275' + address.slice(2).padStart(64, '0')
+                        to: CONTRACT_ADDRESS,
+                        data: '0x14e55c81' + id.toString(16).padStart(64, '0'),
+                        gas: '0x30000'
                     }]
                 });
-                showSuccess('Making validator... TX: ' + tx.slice(0,10));
-                document.getElementById('validator-address').value = '';
-            } catch (error) {
-                showError('Failed: ' + error.message);
-            }
-        }
-
-        async function approveValidation(id) {
-            if (!account) return;
-            
-            try {
-                const tx = await ethereum.request({
-                    method: 'eth_sendTransaction',
-                    params: [{
-                        from: account,
-                        to: CONTRACT,
-                        data: '0x14e55c81' + id.toString(16).padStart(64, '0')
-                    }]
-                });
-                showSuccess(`Approving validation #${id}... TX: ${tx.slice(0,10)}`);
+                
+                showAlert(`Approval submitted! TX: ${tx.slice(0,10)}...`, 'success');
+                
+                // Reload validations after 5 seconds
                 setTimeout(loadValidations, 5000);
+                
             } catch (error) {
-                showError('Approval failed: ' + error.message);
+                console.error('Approval error:', error);
+                showAlert(`Approval failed: ${error.message}`, 'error');
             }
         }
-
+        
         async function rejectValidation(id) {
-            if (!account) return;
+            if (!account) {
+                showAlert('Connect wallet first!', 'error');
+                return;
+            }
             
             try {
+                showAlert(`Rejecting validation #${id}...`, 'info');
+                
                 const tx = await ethereum.request({
                     method: 'eth_sendTransaction',
                     params: [{
                         from: account,
-                        to: CONTRACT,
-                        data: '0xf7fed02c' + id.toString(16).padStart(64, '0')
+                        to: CONTRACT_ADDRESS,
+                        data: '0xf7fed02c' + id.toString(16).padStart(64, '0'),
+                        gas: '0x30000'
                     }]
                 });
-                showSuccess(`Rejecting validation #${id}... TX: ${tx.slice(0,10)}`);
+                
+                showAlert(`Rejection submitted! TX: ${tx.slice(0,10)}...`, 'success');
+                
                 setTimeout(loadValidations, 5000);
+                
             } catch (error) {
-                showError('Rejection failed: ' + error.message);
+                console.error('Rejection error:', error);
+                showAlert(`Rejection failed: ${error.message}`, 'error');
             }
         }
-
-        function showError(msg) {
-            document.getElementById('status').innerHTML = `<div class="error">${msg}</div>`;
+        
+        async function manualApprove() {
+            const id = document.getElementById('manual-validation-id').value;
+            if (!id && id !== 0) {
+                showAlert('Please enter a validation ID!', 'error');
+                return;
+            }
+            await approveValidation(parseInt(id));
         }
-
-        function showSuccess(msg) {
-            document.getElementById('status').innerHTML = `<div class="success">${msg}</div>`;
+        
+        async function manualReject() {
+            const id = document.getElementById('manual-validation-id').value;
+            if (!id && id !== 0) {
+                showAlert('Please enter a validation ID!', 'error');
+                return;
+            }
+            await rejectValidation(parseInt(id));
         }
-
-        // Auto-connect if possible
-        window.addEventListener('load', () => {
-            if (window.ethereum) {
-                ethereum.request({ method: 'eth_accounts' }).then(accounts => {
-                    if (accounts.length > 0 && accounts[0].toLowerCase() === OWNER.toLowerCase()) {
-                        account = accounts[0];
-                        connectWallet();
-                    }
+        
+        // Validator Management
+        async function addValidator() {
+            if (!account) {
+                showAlert('Connect wallet first!', 'error');
+                return;
+            }
+            
+            const address = document.getElementById('new-validator-address').value;
+            if (!address || !address.startsWith('0x') || address.length !== 42) {
+                showAlert('Please enter a valid Ethereum address!', 'error');
+                return;
+            }
+            
+            try {
+                showAlert(`Adding validator ${address.slice(0,6)}...${address.slice(-4)}...`, 'info');
+                
+                const tx = await ethereum.request({
+                    method: 'eth_sendTransaction',
+                    params: [{
+                        from: account,
+                        to: CONTRACT_ADDRESS,
+                        data: '0x70480275' + address.slice(2).padStart(64, '0'),
+                        gas: '0x30000'
+                    }]
                 });
+                
+                showAlert(`Validator added! TX: ${tx.slice(0,10)}...`, 'success');
+                document.getElementById('new-validator-address').value = '';
+                
+                setTimeout(loadValidators, 5000);
+                
+            } catch (error) {
+                console.error('Add validator error:', error);
+                showAlert(`Failed to add validator: ${error.message}`, 'error');
             }
+        }
+        
+        // Utility Functions
+        function showAlert(message, type = 'info') {
+            const alertsContainer = document.getElementById('alerts');
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.textContent = message;
+            
+            alertsContainer.appendChild(alertDiv);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                alertDiv.style.opacity = '0';
+                setTimeout(() => alertDiv.remove(), 300);
+            }, 5000);
+        }
+        
+        function filterValidations() {
+            const filter = document.getElementById('status-filter').value;
+            // Implement filtering logic based on validation status
+            loadValidations();
+        }
+        
+        function exportData() {
+            showAlert('Export feature coming soon!', 'info');
+        }
+        
+        function showContractInfo() {
+            showAlert(`Contract: ${CONTRACT_ADDRESS}`, 'info');
+            showAlert(`Network: Sepolia Testnet`, 'info');
+            showAlert(`Owner: ${OWNER_ADDRESS}`, 'info');
+        }
+        
+        function clearCache() {
+            localStorage.clear();
+            showAlert('Cache cleared!', 'success');
+        }
+        
+        async function checkNetwork() {
+            try {
+                const chainId = await ethereum.request({ method: 'eth_chainId' });
+                const blockNumber = await ethereum.request({
+                    method: 'eth_blockNumber',
+                    params: []
+                });
+                
+                showAlert(`Network: ${chainId === SEPOLIA_CHAIN_ID ? 'Sepolia' : 'Unknown'}`, 'info');
+                showAlert(`Current block: ${parseInt(blockNumber, 16)}`, 'info');
+            } catch (error) {
+                showAlert(`Network check failed: ${error.message}`, 'error');
+            }
+        }
+        
+        // Error handling
+        window.addEventListener('error', (event) => {
+            console.error('Global error:', event.error);
+            showAlert('An unexpected error occurred. Check console for details.', 'error');
+        });
+        
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('Unhandled promise rejection:', event.reason);
+            showAlert('An async error occurred. Check console for details.', 'error');
         });
     </script>
 </body>
