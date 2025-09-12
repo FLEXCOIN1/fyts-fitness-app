@@ -13,6 +13,14 @@ import LegalDisclaimer from './components/Legaldisclaimer';
 import StakingDashboard from './components/StakingDashboard';
 import LeaderboardsDashboard from './components/LeaderboardsDashboard';
 
+// Declare window.ethereum type
+declare global {
+  interface Window {
+    ethereum?: any;
+    web3?: any;
+  }
+}
+
 // Contract configuration
 const CONTRACT_ADDRESS = '0x2955128a2ef2c7038381a5F56bcC21A91889595B';
 const SEPOLIA_CHAIN_ID = 11155111;
@@ -71,15 +79,8 @@ function AppContent() {
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [contractBalance, setContractBalance] = useState('0');
-  const [pendingValidations, setPendingValidations] = useState<any[]>([]);
-  
-  // Terms acceptance state
   const [termsAccepted, setTermsAccepted] = useState(false);
-  
-  // Navigation state
   const [activeTab, setActiveTab] = useState<'tracker' | 'staking' | 'leaderboards' | 'tutorial' | 'contact'>('tracker');
-  
-  // Contact form state
   const [contactForm, setContactForm] = useState({
     username: '',
     firstName: '',
@@ -87,53 +88,40 @@ function AppContent() {
     details: ''
   });
   const [contactSubmitted, setContactSubmitted] = useState(false);
-  
-  // Check localStorage for terms acceptance
+
   useEffect(() => {
     const accepted = localStorage.getItem('fyts_terms_accepted') === 'true';
     setTermsAccepted(accepted);
   }, []);
 
-  // Check contract balance and pending validations when wallet connects
   useEffect(() => {
     if (isConnected && address) {
       fetchContractBalance();
-      checkPendingValidations();
     }
   }, [isConnected, address]);
 
   const fetchContractBalance = async () => {
-    if (!window.ethereum || !address) return;
+    if (!address) return;
+    
+    // Check for Web3 provider
+    const provider = window.ethereum ? 
+      new ethers.providers.Web3Provider(window.ethereum) :
+      new ethers.providers.JsonRpcProvider('https://sepolia.infura.io/v3/YOUR_INFURA_KEY');
     
     try {
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
       const contract = new ethers.Contract(CONTRACT_ADDRESS, FYTSContract.abi, provider);
       const balance = await contract.balanceOf(address);
       setContractBalance(ethers.utils.formatEther(balance));
     } catch (error) {
       console.error('Error fetching balance:', error);
+      setContractBalance('0');
     }
   };
 
-  const checkPendingValidations = async () => {
-    if (!window.ethereum || !address) return;
-    
-    try {
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, FYTSContract.abi, provider);
-      const pending = await contract.getPendingValidations();
-      setPendingValidations(pending);
-      console.log('Pending validations:', pending.length);
-    } catch (error) {
-      console.error('Error checking pending validations:', error);
-    }
-  };
-
-  // Quote rotation effect
   useEffect(() => {
     let interval: number | null = null;
     if (state === 'running' || state === 'stationary') {
-      interval = setInterval(() => {
+      interval = window.setInterval(() => {
         setCurrentQuoteIndex((prevIndex) => 
           (prevIndex + 1) % protocolMessages.length
         );
@@ -158,21 +146,28 @@ function AppContent() {
   const submitNetworkValidation = async (distance: number, duration: number) => {
     console.log('Starting validation submission...');
     console.log('Distance:', distance, 'Duration:', duration);
-    console.log('Connected:', isConnected, 'Address:', address, 'Chain:', chain?.id);
     
+    // Check wallet connection
     if (!isConnected || !address) {
       alert('Please connect your wallet first');
       return;
     }
 
-    if (chain?.id !== SEPOLIA_CHAIN_ID) {
-      alert(`Wrong network! Please switch to Sepolia. Current chain: ${chain?.id}`);
-      return;
-    }
-
+    // Check minimum distance
     if (distance < 100) {
       alert(`Distance too short: ${distance.toFixed(2)}m. Minimum 100m required.`);
       return;
+    }
+
+    // Check for Web3 provider (works on mobile)
+    if (!window.ethereum) {
+      // Try to use web3 if available
+      if (window.web3?.currentProvider) {
+        window.ethereum = window.web3.currentProvider;
+      } else {
+        alert('No Web3 provider found. Please use:\n1. MetaMask mobile browser\n2. WalletConnect\n3. Coinbase Wallet');
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -181,81 +176,77 @@ function AppContent() {
       alert('Submitting validation to blockchain... This may take 30 seconds.');
       
       const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const signer = provider.getSigner();
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, FYTSContract.abi, signer);
       
-      // Check approval status
-      const isApproved = await contract.approvedValidators(address);
-      console.log('Is approved validator:', isApproved);
-      
-      if (!isApproved) {
-        alert('Your address is not an approved validator. You are already approved, so this should not happen. Check console for details.');
-        console.error('Approval check failed for address:', address);
+      // Check network
+      const network = await provider.getNetwork();
+      if (network.chainId !== SEPOLIA_CHAIN_ID) {
+        alert(`Wrong network! Please switch to Sepolia Testnet.\nCurrent network: ${network.name || network.chainId}`);
         setIsSubmitting(false);
         return;
       }
       
-      // Create proof data
+      const signer = provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, FYTSContract.abi, signer);
+      
+      // Check if approved validator
+      try {
+        const isApproved = await contract.approvedValidators(address);
+        console.log('Is approved validator:', isApproved);
+      } catch (e) {
+        console.log('Could not check approval status');
+      }
+      
+      // Submit validation
       const proofData = {
         distance: Math.floor(distance),
         duration: Math.floor(duration / 1000),
         timestamp: Date.now(),
-        device: navigator.userAgent
+        device: 'mobile'
       };
-      
-      const proofURI = `data:${JSON.stringify(proofData)}`;
-      
-      // Submit validation to contract
-      console.log('Submitting with params:', {
-        distance: Math.floor(distance),
-        duration: Math.floor(duration / 1000),
-        proofURI
-      });
       
       const tx = await contract.submitValidation(
         Math.floor(distance),
         Math.floor(duration / 1000),
-        proofURI
+        `data:${JSON.stringify(proofData)}`
       );
       
-      alert(`Transaction sent! Hash: ${tx.hash.slice(0,10)}...`);
-      console.log('Transaction sent:', tx.hash);
+      alert(`Transaction sent!\nHash: ${tx.hash.slice(0, 10)}...`);
+      console.log('Transaction:', tx.hash);
       
       const receipt = await tx.wait();
       console.log('Transaction confirmed:', receipt);
       
-      // Get the validation ID from events
-      const validationId = receipt.events?.find((e: any) => e.event === 'ValidationSubmitted')?.args?.validationId;
+      alert('Validation submitted successfully! Admin approval required for token distribution.');
       
-      alert(`Validation submitted successfully! ID: ${validationId || 'pending'}. Admin approval required for token distribution.`);
-      
-      // Calculate approximate reward
+      // Calculate reward
       const baseReward = 0.1;
       const distanceReward = (distance * 0.0001);
       const durationBonus = duration > 1800000 ? 0.5 : 0;
-      const estimatedReward = baseReward + distanceReward + durationBonus;
+      const estimatedReward = Math.min(baseReward + distanceReward + durationBonus, 10);
       
       setValidationResult({
         success: true,
-        userAllocation: Math.min(estimatedReward, 10),
+        userAllocation: estimatedReward,
         txHash: receipt.transactionHash
       });
       
-      // Refresh balance and pending validations
+      // Refresh balance
       await fetchContractBalance();
-      await checkPendingValidations();
       
     } catch (error: any) {
-      console.error('Full error:', error);
+      console.error('Error:', error);
       
-      if (error.message.includes('Daily limit reached')) {
-        alert('You have reached your daily validation limit (10 per day)');
-      } else if (error.message.includes('Speed too high')) {
-        alert('Movement speed too high - possible GPS error');
-      } else if (error.message.includes('user rejected')) {
-        alert('Transaction cancelled by user');
+      // User-friendly error messages
+      if (error.code === 4001 || error.message?.includes('rejected')) {
+        alert('Transaction cancelled');
+      } else if (error.message?.includes('Daily limit')) {
+        alert('Daily validation limit reached (10 per day)');
+      } else if (error.message?.includes('Speed too high')) {
+        alert('Movement speed too high - GPS error detected');
+      } else if (error.message?.includes('Already approved')) {
+        alert('Address already approved as validator');
       } else {
-        alert(`Error: ${error.message || 'Unknown error occurred'}`);
+        alert(`Error: ${error.reason || error.message?.substring(0, 100) || 'Transaction failed'}`);
       }
     } finally {
       setIsSubmitting(false);
@@ -264,24 +255,14 @@ function AppContent() {
 
   const handleRunEnd = () => {
     end();
+    console.log('Run ended. Distance:', stats.distanceMeters);
     
-    // Log final stats
-    console.log('Run ended with stats:', {
-      distance: stats.distanceMeters,
-      duration: stats.elapsedMs,
-      connected: isConnected,
-      address: address
-    });
-    
-    // Check if we should submit
     if (stats.distanceMeters >= 100) {
       if (isConnected && address) {
         submitNetworkValidation(stats.distanceMeters, stats.elapsedMs);
       } else {
         alert('Connect wallet to submit validation and earn FYTS tokens');
       }
-    } else {
-      console.log('Distance too short for validation:', stats.distanceMeters);
     }
   };
 
@@ -292,7 +273,7 @@ function AppContent() {
 
   const handleContactSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Protocol inquiry submitted:', contactForm);
+    console.log('Contact form submitted:', contactForm);
     setContactSubmitted(true);
     setTimeout(() => {
       setContactSubmitted(false);
@@ -320,20 +301,26 @@ function AppContent() {
         <h1 className="app-title">FYTS FITNESS</h1>
         <p className="protocol-subtitle">Movement Validation Protocol</p>
         {isConnected && (
-          <div className="balance-display">
-            <span className="balance-label">Balance:</span>
-            <span className="balance-value">{parseFloat(contractBalance).toFixed(4)} FYTS</span>
-            {pendingValidations.length > 0 && (
-              <span className="pending-badge">{pendingValidations.length} pending</span>
-            )}
+          <div style={{ 
+            marginTop: '0.5rem', 
+            padding: '0.5rem 1rem', 
+            background: 'rgba(16, 185, 129, 0.1)',
+            borderRadius: '0.5rem',
+            border: '1px solid rgba(16, 185, 129, 0.2)',
+            textAlign: 'center'
+          }}>
+            <span style={{ color: '#10b981', fontWeight: 'bold' }}>
+              Balance: {parseFloat(contractBalance).toFixed(4)} FYTS
+            </span>
             {chain?.id !== SEPOLIA_CHAIN_ID && (
-              <span className="network-warning">⚠️ Switch to Sepolia</span>
+              <span style={{ color: '#ef4444', marginLeft: '1rem', display: 'block', marginTop: '0.25rem' }}>
+                ⚠️ Switch to Sepolia Testnet
+              </span>
             )}
           </div>
         )}
       </div>
 
-      {/* Navigation */}
       <div className="main-navigation">
         <button 
           className={activeTab === 'tracker' ? 'nav-tab active' : 'nav-tab'}
@@ -369,7 +356,6 @@ function AppContent() {
 
       <WalletConnect />
 
-      {/* Tracker Tab */}
       {activeTab === 'tracker' && (
         <>
           {(state === 'running' || state === 'stationary') && (
@@ -389,8 +375,7 @@ function AppContent() {
                    state === 'running' ? 'Validating' :
                    state === 'paused' ? 'Suspended' :
                    state === 'ended' ? 'Finalized' :
-                   state === 'idle' ? 'Ready' :
-                   String(state).charAt(0).toUpperCase() + String(state).slice(1)}
+                   'Ready'}
                 </span>
               </div>
               <div className="gps-indicator">
@@ -409,7 +394,6 @@ function AppContent() {
             )}
           </div>
 
-          {/* Debug Button for Mobile Testing */}
           {state === 'running' && (
             <button 
               onClick={(e) => {
@@ -422,7 +406,22 @@ function AppContent() {
                   btn.textContent = '+100m (Debug)';
                 }, 1000);
               }}
-              className="debug-button"
+              style={{
+                position: 'fixed',
+                bottom: '80px',
+                right: '20px',
+                padding: '12px 20px',
+                background: 'linear-gradient(135deg, #f97316, #ea580c)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+                zIndex: 9999,
+                cursor: 'pointer',
+                transition: 'all 0.3s ease'
+              }}
             >
               +100m (Debug)
             </button>
@@ -471,7 +470,9 @@ function AppContent() {
             {state === 'paused' && (
               <div className="button-group">
                 <button onClick={resume} className="action-button resume">▶</button>
-                <button onClick={handleRunEnd} className="action-button stop" disabled={isSubmitting}>⏹</button>
+                <button onClick={handleRunEnd} className="action-button stop" disabled={isSubmitting}>
+                  {isSubmitting ? '⏳' : '⏹'}
+                </button>
               </div>
             )}
             
@@ -492,18 +493,24 @@ function AppContent() {
                   </div>
                   
                   {validationResult && validationResult.success && (
-                    <div className="validation-result">
-                      <div className="result-amount">
+                    <div style={{ 
+                      marginTop: '1rem', 
+                      padding: '1rem', 
+                      background: 'rgba(16, 185, 129, 0.1)',
+                      borderRadius: '0.75rem',
+                      border: '1px solid rgba(16, 185, 129, 0.2)'
+                    }}>
+                      <div style={{ color: '#10b981', fontSize: '1.25rem', fontWeight: 'bold' }}>
                         +{validationResult.userAllocation.toFixed(4)} FYTS (Pending)
                       </div>
-                      <div className="result-status">
+                      <div style={{ color: '#6ee7b7', fontSize: '0.875rem', marginTop: '0.25rem' }}>
                         Awaiting admin approval
                       </div>
                       <a 
                         href={`https://sepolia.etherscan.io/tx/${validationResult.txHash}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="result-link"
+                        style={{ color: '#3b82f6', fontSize: '0.75rem', marginTop: '0.5rem', display: 'block' }}
                       >
                         View on Etherscan →
                       </a>
@@ -526,115 +533,241 @@ function AppContent() {
         </>
       )}
 
-      {/* Staking Tab */}
       {activeTab === 'staking' && <StakingDashboard />}
-
-      {/* Leaderboards Tab */}
+      
       {activeTab === 'leaderboards' && <LeaderboardsDashboard />}
 
-      {/* Tutorial Tab */}
       {activeTab === 'tutorial' && (
-        <div className="tutorial-container">
-          <h2 className="section-title">Protocol Documentation</h2>
+        <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
+          <h2 style={{ color: '#10b981', marginBottom: '2rem' }}>Protocol Documentation</h2>
           
-          <div className="info-card primary">
-            <h3>Blockchain Integration Active</h3>
-            <p>Contract: {CONTRACT_ADDRESS.slice(0, 6)}...{CONTRACT_ADDRESS.slice(-4)}</p>
-            <p>Network: Sepolia Testnet</p>
-            <p>Status: {isConnected ? '🟢 Connected' : '🔴 Not Connected'}</p>
+          <div style={{ 
+            background: 'rgba(59, 130, 246, 0.1)',
+            padding: '1.5rem',
+            borderRadius: '1rem',
+            marginBottom: '2rem',
+            border: '1px solid rgba(59, 130, 246, 0.2)'
+          }}>
+            <h3 style={{ color: '#60a5fa', margin: '0 0 1rem 0' }}>Blockchain Integration</h3>
+            <p style={{ color: '#bfdbfe', fontSize: '1rem' }}>
+              Contract: {CONTRACT_ADDRESS.slice(0, 6)}...{CONTRACT_ADDRESS.slice(-4)}
+            </p>
+            <p style={{ color: '#bfdbfe', fontSize: '1rem', marginTop: '0.5rem' }}>
+              Network: Sepolia Testnet
+            </p>
+            <p style={{ color: '#bfdbfe', fontSize: '1rem', marginTop: '0.5rem' }}>
+              Status: {isConnected ? '🟢 Connected' : '🔴 Not Connected'}
+            </p>
           </div>
 
-          <div className="steps-container">
-            <h3>How It Works</h3>
+          <div style={{ marginBottom: '2rem' }}>
+            <h3 style={{ color: '#10b981', marginBottom: '1rem' }}>How It Works</h3>
             
-            <div className="step-card">
-              <h4>1. Connect Wallet</h4>
-              <p>Connect MetaMask or WalletConnect to Sepolia testnet</p>
+            <div style={{ 
+              padding: '1rem',
+              background: 'rgba(255, 255, 255, 0.03)',
+              borderRadius: '0.75rem',
+              marginBottom: '1rem'
+            }}>
+              <h4 style={{ color: '#f97316', margin: '0 0 0.5rem 0' }}>1. Connect Wallet</h4>
+              <p style={{ color: '#d1d5db', margin: 0 }}>
+                Use MetaMask mobile browser or WalletConnect
+              </p>
             </div>
 
-            <div className="step-card">
-              <h4>2. Start Validation</h4>
-              <p>GPS tracks movement. Min 100m. Use +100m button if GPS fails.</p>
+            <div style={{ 
+              padding: '1rem',
+              background: 'rgba(255, 255, 255, 0.03)',
+              borderRadius: '0.75rem',
+              marginBottom: '1rem'
+            }}>
+              <h4 style={{ color: '#f97316', margin: '0 0 0.5rem 0' }}>2. Start Validation</h4>
+              <p style={{ color: '#d1d5db', margin: 0 }}>
+                GPS tracks movement. Min 100m. Use +100m button for testing.
+              </p>
             </div>
 
-            <div className="step-card">
-              <h4>3. Earn FYTS</h4>
-              <p>Base: 0.1 FYTS + 0.0001 FYTS/meter + bonuses. Max 10 FYTS per validation.</p>
+            <div style={{ 
+              padding: '1rem',
+              background: 'rgba(255, 255, 255, 0.03)',
+              borderRadius: '0.75rem'
+            }}>
+              <h4 style={{ color: '#f97316', margin: '0 0 0.5rem 0' }}>3. Earn FYTS</h4>
+              <p style={{ color: '#d1d5db', margin: 0 }}>
+                Base: 0.1 FYTS + 0.0001 FYTS/meter. Max 10 FYTS.
+              </p>
             </div>
           </div>
 
-          <div className="warning-card">
-            <p>⚠️ Testnet Only - Tokens have no real value</p>
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.1)',
+            padding: '1rem',
+            borderRadius: '0.75rem',
+            border: '1px solid rgba(239, 68, 68, 0.2)'
+          }}>
+            <p style={{ color: '#fca5a5', margin: 0, fontWeight: 600 }}>
+              ⚠️ Testnet Only - No real value
+            </p>
           </div>
         </div>
       )}
 
-      {/* Contact Tab */}
       {activeTab === 'contact' && (
-        <div className="contact-container">
-          <h2 className="section-title">Protocol Support</h2>
+        <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
+          <h2 style={{ color: '#10b981', marginBottom: '2rem' }}>Protocol Support</h2>
           
           {!contactSubmitted ? (
-            <form onSubmit={handleContactSubmit} className="contact-form">
-              <div className="form-group">
-                <label>Validator Username</label>
+            <form onSubmit={handleContactSubmit} style={{
+              background: 'rgba(255, 255, 255, 0.05)',
+              padding: '2rem',
+              borderRadius: '1rem',
+              border: '1px solid rgba(255, 255, 255, 0.1)'
+            }}>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ 
+                  display: 'block', 
+                  color: '#d1d5db', 
+                  marginBottom: '0.5rem',
+                  fontSize: '0.875rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em'
+                }}>
+                  Username
+                </label>
                 <input
                   type="text"
                   required
                   value={contactForm.username}
                   onChange={(e) => setContactForm({...contactForm, username: e.target.value})}
-                  className="form-input"
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: '0.5rem',
+                    color: 'white',
+                    fontSize: '1rem'
+                  }}
                 />
               </div>
 
-              <div className="form-group">
-                <label>Validator Name</label>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ 
+                  display: 'block', 
+                  color: '#d1d5db', 
+                  marginBottom: '0.5rem',
+                  fontSize: '0.875rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em'
+                }}>
+                  Name
+                </label>
                 <input
                   type="text"
                   required
                   value={contactForm.firstName}
                   onChange={(e) => setContactForm({...contactForm, firstName: e.target.value})}
-                  className="form-input"
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: '0.5rem',
+                    color: 'white',
+                    fontSize: '1rem'
+                  }}
                 />
               </div>
 
-              <div className="form-group">
-                <label>Contact Email</label>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ 
+                  display: 'block', 
+                  color: '#d1d5db', 
+                  marginBottom: '0.5rem',
+                  fontSize: '0.875rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em'
+                }}>
+                  Email
+                </label>
                 <input
                   type="email"
                   required
                   value={contactForm.email}
                   onChange={(e) => setContactForm({...contactForm, email: e.target.value})}
-                  className="form-input"
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: '0.5rem',
+                    color: 'white',
+                    fontSize: '1rem'
+                  }}
                 />
               </div>
 
-              <div className="form-group">
-                <label>Support Query Details</label>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ 
+                  display: 'block', 
+                  color: '#d1d5db', 
+                  marginBottom: '0.5rem',
+                  fontSize: '0.875rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em'
+                }}>
+                  Message
+                </label>
                 <textarea
                   required
                   rows={5}
                   value={contactForm.details}
                   onChange={(e) => setContactForm({...contactForm, details: e.target.value})}
-                  className="form-textarea"
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: '0.5rem',
+                    color: 'white',
+                    fontSize: '1rem',
+                    resize: 'vertical'
+                  }}
                 />
               </div>
 
-              <button type="submit" className="submit-button">
-                Submit Protocol Inquiry
+              <button
+                type="submit"
+                style={{
+                  width: '100%',
+                  padding: '1rem',
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  border: 'none',
+                  borderRadius: '0.5rem',
+                  color: 'white',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em'
+                }}
+              >
+                Submit
               </button>
             </form>
           ) : (
-            <div className="success-card">
-              <div className="success-icon">✓</div>
-              <h3>Inquiry Received</h3>
-              <p>Protocol support will respond within 24-48 hours</p>
+            <div style={{
+              background: 'rgba(16, 185, 129, 0.1)',
+              padding: '2rem',
+              borderRadius: '1rem',
+              border: '1px solid rgba(16, 185, 129, 0.2)',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>✓</div>
+              <h3 style={{ color: '#10b981' }}>Message Sent</h3>
+              <p style={{ color: '#6ee7b7' }}>We'll respond within 24-48 hours</p>
             </div>
           )}
-
-          <div className="info-note">
-            <p>For immediate technical support, consult the protocol documentation</p>
-          </div>
         </div>
       )}
     </div>
@@ -647,6 +780,3 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <AppContent />
       </QueryClientProvider>
-    </WagmiProvider>
-  );
-}
