@@ -14,35 +14,7 @@ declare global {
 }
 
 // Contract ABI for your deployed contract
-const CONTRACT_ABI: any[] = [
-  {
-    "inputs": [{"internalType": "address", "name": "account", "type": "address"}],
-    "name": "balanceOf",
-    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {"internalType": "uint256", "name": "distance", "type": "uint256"},
-      {"internalType": "uint256", "name": "duration", "type": "uint256"},
-      {"internalType": "string", "name": "proofURI", "type": "string"}
-    ],
-    "name": "submitValidation",
-    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [{"internalType": "address", "name": "", "type": "address"}],
-    "name": "approvedValidators",
-    "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [{"internalType": "address", "name": "validator", "type": "address"}],
-    "name": "approveValidator",
+
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -91,7 +63,7 @@ export default function App() {
   const watchIdRef = useRef<number | null>(null);
   const lastPositionRef = useRef<GPSPosition | null>(null);
   const startTimeRef = useRef<number | null>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+ const timerRef = useRef<number | null>(null);
   const positionCount = useRef(0);
 
   // Web3 Helper Functions
