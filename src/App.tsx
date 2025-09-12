@@ -13,14 +13,6 @@ declare global {
   }
 }
 
-// Contract ABI for your deployed contract
-
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  }
-];
-
 const CONTRACT_ADDRESS = '0x2955128a2ef2c7038381a5F56bcC21A91889595B';
 const SEPOLIA_CHAIN_ID = 11155111;
 const SEPOLIA_CHAIN_HEX = '0xaa36a7';
@@ -63,7 +55,7 @@ export default function App() {
   const watchIdRef = useRef<number | null>(null);
   const lastPositionRef = useRef<GPSPosition | null>(null);
   const startTimeRef = useRef<number | null>(null);
- const timerRef = useRef<number | null>(null);
+  const timerRef = useRef<number | null>(null);
   const positionCount = useRef(0);
 
   // Web3 Helper Functions
@@ -195,13 +187,13 @@ export default function App() {
     
     // Update GPS status
     if (accuracy <= 10) {
-      setGpsStatus(`📍 High Accuracy (±${accuracy.toFixed(0)}m)`);
+      setGpsStatus(`High Accuracy (±${accuracy.toFixed(0)}m)`);
     } else if (accuracy <= 30) {
-      setGpsStatus(`📍 Good GPS (±${accuracy.toFixed(0)}m)`);
+      setGpsStatus(`Good GPS (±${accuracy.toFixed(0)}m)`);
     } else if (accuracy <= 50) {
-      setGpsStatus(`📍 Fair GPS (±${accuracy.toFixed(0)}m)`);
+      setGpsStatus(`Fair GPS (±${accuracy.toFixed(0)}m)`);
     } else {
-      setGpsStatus(`⚠️ Poor GPS (±${accuracy.toFixed(0)}m)`);
+      setGpsStatus(`Poor GPS (±${accuracy.toFixed(0)}m)`);
     }
     
     // Use device speed if available
@@ -251,7 +243,7 @@ export default function App() {
       return;
     }
     
-    setGpsStatus('🔄 Starting GPS...');
+    setGpsStatus('Starting GPS...');
     positionCount.current = 0;
     
     // Get initial position
@@ -276,12 +268,12 @@ export default function App() {
       (error) => {
         console.error('GPS Error:', error);
         if (error.code === 1) {
-          setGpsStatus('❌ Location denied');
+          setGpsStatus('Location denied');
           alert('Location permission denied. Please enable in settings and refresh.');
         } else if (error.code === 2) {
-          setGpsStatus('⚠️ GPS unavailable');
+          setGpsStatus('GPS unavailable');
         } else if (error.code === 3) {
-          setGpsStatus('⏱️ GPS timeout');
+          setGpsStatus('GPS timeout');
         }
       },
       {
@@ -304,7 +296,7 @@ export default function App() {
     startGPSTracking();
     
     // Timer
-    timerRef.current = setInterval(() => {
+    timerRef.current = window.setInterval(() => {
       if (startTimeRef.current) {
         setElapsedTime(Math.floor((Date.now() - startTimeRef.current) / 1000));
       }
@@ -394,7 +386,7 @@ export default function App() {
       });
       
       setTxHash(tx);
-      alert(`✅ Transaction submitted!\n\nDistance: ${distanceInt}m\nExpected FYTS: ~${expectedFYTS.toFixed(2)}\nTx Hash: ${tx.slice(0, 10)}...${tx.slice(-8)}\n\n⏳ Waiting for confirmation...`);
+      alert(`Transaction submitted!\n\nDistance: ${distanceInt}m\nExpected FYTS: ~${expectedFYTS.toFixed(2)}\nTx Hash: ${tx.slice(0, 10)}...${tx.slice(-8)}\n\nWaiting for confirmation...`);
       
       // Wait for transaction receipt
       let receipt = null;
@@ -413,7 +405,7 @@ export default function App() {
       }
       
       if (receipt && receipt.status === '0x1') {
-        alert(`🎉 SUCCESS!\n\nValidation submitted to blockchain!\nDistance: ${distanceInt}m\nExpected reward: ~${expectedFYTS.toFixed(2)} FYTS\n\n${isValidator ? 'Tokens will be minted after admin approval.' : 'TEST MODE: Admin approval required for token minting.'}`);
+        alert(`SUCCESS!\n\nValidation submitted to blockchain!\nDistance: ${distanceInt}m\nExpected reward: ~${expectedFYTS.toFixed(2)} FYTS\n\n${isValidator ? 'Tokens will be minted after admin approval.' : 'TEST MODE: Admin approval required for token minting.'}`);
         
         // Update balance
         await updateBalance(account);
@@ -540,7 +532,7 @@ export default function App() {
                 background: '#fff3e0',
                 borderRadius: '5px'
               }}>
-                ⚠️ Test Mode (not approved validator)
+                Test Mode (not approved validator)
               </div>
             )}
             {chainId && chainId !== SEPOLIA_CHAIN_ID && (
@@ -679,7 +671,7 @@ export default function App() {
           fontSize: '0.95rem',
           fontWeight: '500'
         }}>
-          {gpsStatus}
+          GPS: {gpsStatus}
         </div>
 
         {/* Control Buttons */}
@@ -702,7 +694,7 @@ export default function App() {
             onMouseDown={e => e.currentTarget.style.transform = 'scale(0.98)'}
             onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
           >
-            🏃 START RUN
+            START RUN
           </button>
         )}
 
@@ -722,7 +714,7 @@ export default function App() {
                 boxShadow: '0 10px 30px rgba(252, 74, 26, 0.3)'
               }}
             >
-              ⏹️ STOP
+              STOP
             </button>
             
             {/* Debug button for testing */}
@@ -755,7 +747,7 @@ export default function App() {
               textAlign: 'center'
             }}>
               <div style={{ fontSize: '1.3rem', fontWeight: 'bold', marginBottom: '10px', color: '#333' }}>
-                🏁 Run Complete!
+                Run Complete!
               </div>
               <div style={{ fontSize: '1.1rem', marginBottom: '5px' }}>
                 Distance: <strong>{distance.toFixed(1)}m</strong>
@@ -801,7 +793,7 @@ export default function App() {
                   boxShadow: '0 10px 30px rgba(102, 126, 234, 0.3)'
                 }}
               >
-                {isSubmitting ? '⏳ SUBMITTING...' : '💎 CLAIM FYTS'}
+                {isSubmitting ? 'SUBMITTING...' : 'CLAIM FYTS'}
               </button>
               
               <button 
@@ -822,7 +814,7 @@ export default function App() {
                   fontSize: '1.1rem'
                 }}
               >
-                🔄 NEW RUN
+                NEW RUN
               </button>
             </div>
           </div>
@@ -836,7 +828,7 @@ export default function App() {
         padding: '15px',
         boxShadow: '0 5px 20px rgba(0,0,0,0.1)'
       }}>
-        <h3 style={{ margin: '0 0 10px 0', color: '#333' }}>📊 Reward System</h3>
+        <h3 style={{ margin: '0 0 10px 0', color: '#333' }}>Reward System</h3>
         <div style={{ fontSize: '0.9rem', color: '#666', lineHeight: 1.6 }}>
           <div>• Base reward: <strong>10 FYTS</strong></div>
           <div>• Distance bonus: <strong>1 FYTS per 100m</strong></div>
