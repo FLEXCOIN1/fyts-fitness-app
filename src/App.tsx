@@ -13,11 +13,9 @@ import LegalDisclaimer from './components/Legaldisclaimer';
 import StakingDashboard from './components/StakingDashboard';
 import LeaderboardsDashboard from './components/LeaderboardsDashboard';
 
-// Contract configuration
 const CONTRACT_ADDRESS = '0x2955128a2ef2c7038381a5F56bcC21A91889595B';
 const SEPOLIA_CHAIN_ID = 11155111;
 
-// Create the wagmi configuration
 const config = createConfig({
   chains: [sepolia, mainnet, polygon, arbitrum, optimism],
   transports: {
@@ -47,44 +45,14 @@ const config = createConfig({
 
 const queryClient = new QueryClient();
 
-const protocolMessages = [
-  "Validation sequence in progress...",
-  "Contributing to network consensus...",
-  "Movement data processing...",
-  "Protocol synchronization active...",
-  "Distributed validation confirmed...",
-  "Network participation acknowledged...",
-  "Consensus mechanism engaged...",
-  "Validation metrics recording...",
-  "Protocol integrity maintained...",
-  "Decentralized verification active...",
-];
-
 function AppContent() {
   const { state, stats, formattedStats, start, pause, resume, end, discard, addDistance } = useRunTracker();
-  const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
   const { isConnected, address, chain } = useAccount();
-  const [validationResult, setValidationResult] = useState<{
-    success: boolean;
-    userAllocation: number;
-    txHash: string;
-  } | null>(null);
+  const [validationResult, setValidationResult] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [contractBalance, setContractBalance] = useState('0');
-  const [termsAccepted, setTermsAccepted] = useState(false);
-  const [activeTab, setActiveTab] = useState<'tracker' | 'staking' | 'leaderboards' | 'tutorial' | 'contact'>('tracker');
-  const [contactForm, setContactForm] = useState({
-    username: '',
-    firstName: '',
-    email: '',
-    details: ''
-  });
-  const [contactSubmitted, setContactSubmitted] = useState(false);
-
-  useEffect(() => {
-    const accepted = localStorage.getItem('fyts_terms_accepted') === 'true';
-    setTermsAccepted(accepted);
-  }, []);
+  const [activeTab, setActiveTab] = useState<string>('tracker');
+  const [debugClicks, setDebugClicks] = useState(0);
 
   useEffect(() => {
     if (isConnected && address) {
@@ -93,664 +61,338 @@ function AppContent() {
   }, [isConnected, address]);
 
   const fetchContractBalance = async () => {
-    if (!address) return;
-    
-    const provider = (window as any).ethereum ? 
-      new ethers.providers.Web3Provider((window as any).ethereum) :
-      new ethers.providers.JsonRpcProvider('https://sepolia.infura.io/v3/YOUR_INFURA_KEY');
+    if (!address || !(window as any).ethereum) return;
     
     try {
+      const provider = new ethers.providers.Web3Provider((window as any).ethereum);
       const contract = new ethers.Contract(CONTRACT_ADDRESS, FYTSContract.abi, provider);
       const balance = await contract.balanceOf(address);
       setContractBalance(ethers.utils.formatEther(balance));
     } catch (error) {
-      console.error('Error fetching balance:', error);
-      setContractBalance('0');
+      console.error('Balance fetch error:', error);
     }
   };
 
-  useEffect(() => {
-    let interval: number | null = null;
-    if (state === 'running' || state === 'stationary') {
-      interval = window.setInterval(() => {
-        setCurrentQuoteIndex((prevIndex) => 
-          (prevIndex + 1) % protocolMessages.length
-        );
-      }, 15000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [state]);
-
-  const formatDistanceWithBoth = (meters: number): string => {
-    const km = (meters / 1000).toFixed(2);
-    const miles = (meters * 0.000621371).toFixed(2);
-    
-    if (meters >= 1000) {
-      return `${km} km (${miles} mi)`;
-    }
-    const feet = Math.round(meters * 3.28084);
-    return `${feet} ft (${(feet * 0.000189394).toFixed(3)} mi)`;
-  };
-
-  const submitNetworkValidation = async (distance: number, duration: number) => {
-    console.log('Starting validation submission...');
-    console.log('Distance:', distance, 'Duration:', duration);
-    
-    if (!isConnected || !address) {
-      alert('Please connect your wallet first');
+  const submitValidation = async () => {
+    if (!isConnected) {
+      alert('Connect your wallet first!');
       return;
     }
 
-    if (distance < 100) {
-      alert(`Distance too short: ${distance.toFixed(2)}m. Minimum 100m required.`);
+    if (stats.distanceMeters < 100) {
+      alert(`Too short! You have ${stats.distanceMeters.toFixed(0)}m, need 100m minimum`);
       return;
-    }
-
-    if (!(window as any).ethereum) {
-      if ((window as any).web3?.currentProvider) {
-        (window as any).ethereum = (window as any).web3.currentProvider;
-      } else {
-        alert('No Web3 provider found. Please use:\n1. MetaMask mobile browser\n2. WalletConnect\n3. Coinbase Wallet');
-        return;
-      }
     }
 
     setIsSubmitting(true);
     
     try {
-      alert('Submitting validation to blockchain... This may take 30 seconds.');
-      
       const provider = new ethers.providers.Web3Provider((window as any).ethereum);
-      
       const network = await provider.getNetwork();
+      
       if (network.chainId !== SEPOLIA_CHAIN_ID) {
-        alert(`Wrong network! Please switch to Sepolia Testnet.\nCurrent network: ${network.name || network.chainId}`);
+        alert('Switch to Sepolia network in MetaMask!');
         setIsSubmitting(false);
         return;
       }
-      
+
       const signer = provider.getSigner();
       const contract = new ethers.Contract(CONTRACT_ADDRESS, FYTSContract.abi, signer);
       
-      try {
-        const isApproved = await contract.approvedValidators(address);
-        console.log('Is approved validator:', isApproved);
-      } catch (e) {
-        console.log('Could not check approval status');
-      }
-      
-      const proofData = {
-        distance: Math.floor(distance),
-        duration: Math.floor(duration / 1000),
-        timestamp: Date.now(),
-        device: 'mobile'
-      };
-      
       const tx = await contract.submitValidation(
-        Math.floor(distance),
-        Math.floor(duration / 1000),
-        `data:${JSON.stringify(proofData)}`
+        Math.floor(stats.distanceMeters),
+        Math.floor(stats.elapsedMs / 1000),
+        `data:${JSON.stringify({distance: stats.distanceMeters, time: Date.now()})}`
       );
       
-      alert(`Transaction sent!\nHash: ${tx.hash.slice(0, 10)}...`);
-      console.log('Transaction:', tx.hash);
+      alert('Sending to blockchain...');
+      await tx.wait();
       
-      const receipt = await tx.wait();
-      console.log('Transaction confirmed:', receipt);
-      
-      alert('Validation submitted successfully! Admin approval required for token distribution.');
-      
-      const baseReward = 0.1;
-      const distanceReward = (distance * 0.0001);
-      const durationBonus = duration > 1800000 ? 0.5 : 0;
-      const estimatedReward = Math.min(baseReward + distanceReward + durationBonus, 10);
+      alert('Success! Tokens pending admin approval');
       
       setValidationResult({
         success: true,
-        userAllocation: estimatedReward,
-        txHash: receipt.transactionHash
+        tokens: (stats.distanceMeters * 0.001).toFixed(2),
+        txHash: tx.hash
       });
       
-      await fetchContractBalance();
-      
+      fetchContractBalance();
     } catch (error: any) {
-      console.error('Error:', error);
-      
-      if (error.code === 4001 || error.message?.includes('rejected')) {
-        alert('Transaction cancelled');
-      } else if (error.message?.includes('Daily limit')) {
-        alert('Daily validation limit reached (10 per day)');
-      } else if (error.message?.includes('Speed too high')) {
-        alert('Movement speed too high - GPS error detected');
-      } else if (error.message?.includes('Already approved')) {
-        alert('Address already approved as validator');
+      console.error(error);
+      if (error.code === -32603 || error.message?.includes('insufficient funds')) {
+        alert('You need Sepolia ETH for gas! Get free ETH from sepoliafaucet.com');
       } else {
-        alert(`Error: ${error.reason || error.message?.substring(0, 100) || 'Transaction failed'}`);
+        alert(`Error: ${error.message?.slice(0, 50) || 'Transaction failed'}`);
       }
-    } finally {
-      setIsSubmitting(false);
     }
+    
+    setIsSubmitting(false);
   };
 
   const handleRunEnd = () => {
     end();
-    console.log('Run ended. Distance:', stats.distanceMeters);
-    
     if (stats.distanceMeters >= 100) {
-      if (isConnected && address) {
-        submitNetworkValidation(stats.distanceMeters, stats.elapsedMs);
-      } else {
-        alert('Connect wallet to submit validation and earn FYTS tokens');
-      }
+      submitValidation();
     }
   };
 
-  const handleAcceptTerms = () => {
-    localStorage.setItem('fyts_terms_accepted', 'true');
-    setTermsAccepted(true);
+  const handleDebugClick = () => {
+    addDistance(100);
+    setDebugClicks(prev => prev + 1);
   };
 
-  const handleContactSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log('Contact form submitted:', contactForm);
-    setContactSubmitted(true);
-    setTimeout(() => {
-      setContactSubmitted(false);
-      setContactForm({
-        username: '',
-        firstName: '',
-        email: '',
-        details: ''
-      });
-    }, 3000);
+  // Vibrant Smash style inline CSS
+  const styles = {
+    container: {
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      minHeight: '100vh',
+      padding: '10px',
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      overflowX: 'hidden' as const
+    },
+    header: {
+      background: 'linear-gradient(135deg, #fff 0%, #f0f0f0 100%)',
+      borderRadius: '25px',
+      padding: '20px',
+      marginBottom: '20px',
+      boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+      textAlign: 'center' as const
+    },
+    title: {
+      background: 'linear-gradient(45deg, #f093fb 0%, #f5576c 100%)',
+      WebkitBackgroundClip: 'text',
+      WebkitTextFillColor: 'transparent',
+      backgroundClip: 'text',
+      fontSize: 'clamp(2rem, 5vw, 3rem)',
+      fontWeight: '900',
+      margin: '0',
+      letterSpacing: '-1px'
+    },
+    subtitle: {
+      fontSize: '1rem',
+      color: '#666',
+      marginTop: '5px'
+    },
+    balanceBox: {
+      background: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
+      borderRadius: '15px',
+      padding: '12px',
+      marginTop: '10px',
+      fontSize: '1.1rem',
+      fontWeight: 'bold',
+      color: '#5f27cd',
+      display: 'inline-block'
+    },
+    mainCard: {
+      background: 'rgba(255, 255, 255, 0.95)',
+      borderRadius: '25px',
+      padding: '20px',
+      marginBottom: '20px',
+      boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
+    },
+    distanceDisplay: {
+      fontSize: 'clamp(3rem, 8vw, 4rem)',
+      fontWeight: '900',
+      background: 'linear-gradient(45deg, #FFD700, #FFA500)',
+      WebkitBackgroundClip: 'text',
+      WebkitTextFillColor: 'transparent',
+      backgroundClip: 'text',
+      textAlign: 'center' as const,
+      margin: '20px 0'
+    },
+    startButton: {
+      background: 'linear-gradient(45deg, #FA8BFF 0%, #2BD2FF 52%, #2BFF88 100%)',
+      border: 'none',
+      borderRadius: '50px',
+      padding: '20px 40px',
+      fontSize: 'clamp(1.5rem, 4vw, 2rem)',
+      color: 'white',
+      fontWeight: 'bold',
+      cursor: 'pointer',
+      boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
+      width: '100%',
+      marginTop: '20px',
+      animation: 'pulse 2s infinite'
+    },
+    buttonGroup: {
+      display: 'flex',
+      justifyContent: 'center',
+      gap: '15px',
+      marginTop: '20px',
+      flexWrap: 'wrap' as const
+    },
+    actionButton: {
+      background: 'linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%)',
+      border: 'none',
+      borderRadius: '20px',
+      padding: '15px 25px',
+      fontSize: '1.2rem',
+      cursor: 'pointer',
+      boxShadow: '0 8px 20px rgba(0,0,0,0.2)',
+      color: 'white',
+      fontWeight: 'bold',
+      minWidth: '120px'
+    },
+    debugButton: {
+      position: 'fixed' as const,
+      bottom: '20px',
+      right: '20px',
+      background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+      border: 'none',
+      borderRadius: '20px',
+      padding: '12px 20px',
+      color: 'white',
+      fontSize: '1rem',
+      fontWeight: 'bold',
+      cursor: 'pointer',
+      boxShadow: '0 8px 20px rgba(0,0,0,0.3)',
+      zIndex: 1000
+    },
+    statGrid: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+      gap: '10px',
+      marginTop: '20px'
+    },
+    statCard: {
+      background: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
+      borderRadius: '15px',
+      padding: '15px',
+      textAlign: 'center' as const,
+      boxShadow: '0 5px 15px rgba(0,0,0,0.1)'
+    },
+    statValue: {
+      fontSize: '1.5rem',
+      fontWeight: 'bold',
+      color: '#5f27cd'
+    },
+    statLabel: {
+      fontSize: '0.8rem',
+      color: '#666',
+      marginTop: '3px'
+    },
+    completionCard: {
+      background: 'linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)',
+      borderRadius: '20px',
+      padding: '25px',
+      textAlign: 'center' as const,
+      color: 'white',
+      marginTop: '20px'
+    }
   };
-
-  if (!termsAccepted) {
-    return <LegalDisclaimer onAccept={handleAcceptTerms} />;
-  }
 
   return (
-    <div className="app-container">
-      <div className="background-gradient"></div>
-      
-      <div className="header">
-        <div className="logo-container">
-          <div className="logo">F</div>
-        </div>
-        <h1 className="app-title">FYTS FITNESS</h1>
-        <p className="protocol-subtitle">Movement Validation Protocol</p>
-        {isConnected && (
-          <div style={{ 
-            marginTop: '0.5rem', 
-            padding: '0.5rem 1rem', 
-            background: 'rgba(16, 185, 129, 0.1)',
-            borderRadius: '0.5rem',
-            border: '1px solid rgba(16, 185, 129, 0.2)',
-            textAlign: 'center'
-          }}>
-            <span style={{ color: '#10b981', fontWeight: 'bold' }}>
-              Balance: {parseFloat(contractBalance).toFixed(4)} FYTS
-            </span>
+    <div style={styles.container}>
+      <div style={styles.header}>
+        <h1 style={styles.title}>VIBRANT SMASH FITNESS</h1>
+        <p style={styles.subtitle}>Move to Earn Power Gems!</p>
+        
+        {isConnected ? (
+          <div style={styles.balanceBox}>
+            Power Gems: {parseFloat(contractBalance).toFixed(2)} FYTS
             {chain?.id !== SEPOLIA_CHAIN_ID && (
-              <span style={{ color: '#ef4444', marginLeft: '1rem', display: 'block', marginTop: '0.25rem' }}>
-                ⚠️ Switch to Sepolia Testnet
-              </span>
+              <div style={{color: 'red', marginTop: '5px', fontSize: '0.9rem'}}>Switch to Sepolia!</div>
             )}
+          </div>
+        ) : (
+          <div style={{marginTop: '10px'}}>
+            <WalletConnect />
           </div>
         )}
       </div>
 
-      <div className="main-navigation">
-        <button 
-          className={activeTab === 'tracker' ? 'nav-tab active' : 'nav-tab'}
-          onClick={() => setActiveTab('tracker')}
-        >
-          🔄 Validator
-        </button>
-        <button 
-          className={activeTab === 'staking' ? 'nav-tab active' : 'nav-tab'}
-          onClick={() => setActiveTab('staking')}
-        >
-          🔒 Staking
-        </button>
-        <button 
-          className={activeTab === 'leaderboards' ? 'nav-tab active' : 'nav-tab'}
-          onClick={() => setActiveTab('leaderboards')}
-        >
-          📊 Rankings
-        </button>
-        <button 
-          className={activeTab === 'tutorial' ? 'nav-tab active' : 'nav-tab'}
-          onClick={() => setActiveTab('tutorial')}
-        >
-          📖 Protocol
-        </button>
-        <button 
-          className={activeTab === 'contact' ? 'nav-tab active' : 'nav-tab'}
-          onClick={() => setActiveTab('contact')}
-        >
-          🔧 Support
-        </button>
+      <div style={styles.mainCard}>
+        <div style={styles.distanceDisplay}>
+          {stats.distanceMeters.toFixed(0)}m
+          {debugClicks > 0 && (
+            <div style={{fontSize: '1rem', color: '#666'}}>
+              (+{debugClicks * 100}m debug)
+            </div>
+          )}
+        </div>
+        
+        <div style={styles.statGrid}>
+          <div style={styles.statCard}>
+            <div style={styles.statValue}>{formattedStats.duration}</div>
+            <div style={styles.statLabel}>Time</div>
+          </div>
+          <div style={styles.statCard}>
+            <div style={styles.statValue}>{formattedStats.pace}</div>
+            <div style={styles.statLabel}>Pace</div>
+          </div>
+          <div style={styles.statCard}>
+            <div style={styles.statValue}>{formattedStats.currentSpeed}</div>
+            <div style={styles.statLabel}>Speed</div>
+          </div>
+        </div>
+
+        {state === 'idle' && (
+          <button onClick={start} style={styles.startButton}>
+            START POWER RUN!
+          </button>
+        )}
+        
+        {(state === 'running' || state === 'stationary') && (
+          <div style={styles.buttonGroup}>
+            <button onClick={pause} style={styles.actionButton}>PAUSE</button>
+            <button onClick={handleRunEnd} style={{...styles.actionButton, 
+              background: 'linear-gradient(135deg, #f5576c 0%, #f093fb 100%)'}} 
+              disabled={isSubmitting}>
+              {isSubmitting ? 'SENDING...' : 'FINISH'}
+            </button>
+          </div>
+        )}
+        
+        {state === 'paused' && (
+          <div style={styles.buttonGroup}>
+            <button onClick={resume} style={styles.actionButton}>RESUME</button>
+            <button onClick={handleRunEnd} style={{...styles.actionButton,
+              background: 'linear-gradient(135deg, #f5576c 0%, #f093fb 100%)'}}>
+              FINISH
+            </button>
+          </div>
+        )}
+        
+        {state === 'ended' && (
+          <div style={styles.completionCard}>
+            <h2 style={{margin: '0 0 15px 0'}}>Power Run Complete!</h2>
+            <p style={{fontSize: '1.2rem'}}>
+              Distance: {stats.distanceMeters.toFixed(0)}m
+            </p>
+            {validationResult && (
+              <div style={{marginTop: '15px', fontSize: '1.5rem', fontWeight: 'bold'}}>
+                +{validationResult.tokens} FYTS earned!
+              </div>
+            )}
+            {stats.distanceMeters < 100 && (
+              <p style={{marginTop: '10px', color: '#ffeb3b'}}>
+                Need 100m minimum to earn gems!
+              </p>
+            )}
+            <button onClick={() => {
+              discard();
+              setValidationResult(null);
+              setDebugClicks(0);
+            }} style={{...styles.startButton, marginTop: '15px', padding: '15px 30px'}}>
+              NEW RUN
+            </button>
+          </div>
+        )}
       </div>
 
-      <WalletConnect />
-
-      {activeTab === 'tracker' && (
-        <>
-          {(state === 'running' || state === 'stationary') && (
-            <div className="motivation-container">
-              <div className="motivation-quote">
-                {protocolMessages[currentQuoteIndex]}
-              </div>
-            </div>
-          )}
-
-          <div className="status-container">
-            <div className="status-card">
-              <div className="status-indicator">
-                <div className={`status-dot ${state}`}></div>
-                <span className="status-text">
-                  {state === 'stationary' ? 'Awaiting Movement' : 
-                   state === 'running' ? 'Validating' :
-                   state === 'paused' ? 'Suspended' :
-                   state === 'ended' ? 'Finalized' :
-                   'Ready'}
-                </span>
-              </div>
-              <div className="gps-indicator">
-                <div className="gps-dots">
-                  <div className="gps-dot"></div>
-                  <div className="gps-dot"></div>
-                  <div className="gps-dot"></div>
-                </div>
-                <span>GPS Active</span>
-              </div>
-            </div>
-            {state === 'stationary' && (
-              <div className="stationary-notice">
-                Movement required for validation sequence
-              </div>
-            )}
-          </div>
-
-          {state === 'running' && (
-            <button 
-              onClick={(e) => {
-                addDistance(100);
-                const btn = e.currentTarget;
-                btn.style.background = '#10b981';
-                btn.textContent = '✓ Added!';
-                setTimeout(() => {
-                  btn.style.background = 'linear-gradient(135deg, #f97316, #ea580c)';
-                  btn.textContent = '+100m (Debug)';
-                }, 1000);
-              }}
-              style={{
-                position: 'fixed',
-                bottom: '80px',
-                right: '20px',
-                padding: '12px 20px',
-                background: 'linear-gradient(135deg, #f97316, #ea580c)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '14px',
-                fontWeight: 'bold',
-                boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
-                zIndex: 9999,
-                cursor: 'pointer',
-                transition: 'all 0.3s ease'
-              }}
-            >
-              +100m (Debug)
-            </button>
-          )}
-
-          <div className="distance-container">
-            <div className="distance-value">
-              {formatDistanceWithBoth(stats.distanceMeters)}
-            </div>
-            <div className="distance-label">Distance Validated</div>
-          </div>
-
-          <div className="stats-grid">
-            <div className="stat-card">
-              <div className="stat-value blue">{formattedStats.duration}</div>
-              <div className="stat-label">Duration</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-value purple">{formattedStats.pace}</div>
-              <div className="stat-label">Pace Metric</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-value orange">{formattedStats.currentSpeed}</div>
-              <div className="stat-label">Velocity</div>
-            </div>
-          </div>
-
-          <div className="action-container">
-            {state === 'idle' && (
-              <button onClick={start} className="start-button">
-                <div className="button-icon">▶</div>
-                <div className="button-text">INITIATE</div>
-                <div className="button-subtitle">Begin validation sequence</div>
-              </button>
-            )}
-            
-            {(state === 'running' || state === 'stationary') && (
-              <div className="button-group">
-                <button onClick={pause} className="action-button pause">⏸</button>
-                <button onClick={handleRunEnd} className="action-button stop" disabled={isSubmitting}>
-                  {isSubmitting ? '⏳' : '⏹'}
-                </button>
-              </div>
-            )}
-            
-            {state === 'paused' && (
-              <div className="button-group">
-                <button onClick={resume} className="action-button resume">▶</button>
-                <button onClick={handleRunEnd} className="action-button stop" disabled={isSubmitting}>
-                  {isSubmitting ? '⏳' : '⏹'}
-                </button>
-              </div>
-            )}
-            
-            {state === 'ended' && (
-              <div className="completion-container">
-                <div className="completion-card">
-                  <div className="completion-emoji">✓</div>
-                  <h2 className="completion-title">Validation Sequence Complete</h2>
-                  <p className="completion-subtitle">
-                    {validationResult ? 'Data submitted to blockchain' : 
-                     stats.distanceMeters < 100 ? 'Distance too short (min 100m)' :
-                     !isConnected ? 'Connect wallet to submit' :
-                     'Ready for submission'}
-                  </p>
-                  <div className="completion-stats">
-                    <div className="completion-distance">{formatDistanceWithBoth(stats.distanceMeters)}</div>
-                    <div className="completion-label">Distance Validated</div>
-                  </div>
-                  
-                  {validationResult && validationResult.success && (
-                    <div style={{ 
-                      marginTop: '1rem', 
-                      padding: '1rem', 
-                      background: 'rgba(16, 185, 129, 0.1)',
-                      borderRadius: '0.75rem',
-                      border: '1px solid rgba(16, 185, 129, 0.2)'
-                    }}>
-                      <div style={{ color: '#10b981', fontSize: '1.25rem', fontWeight: 'bold' }}>
-                        +{validationResult.userAllocation.toFixed(4)} FYTS (Pending)
-                      </div>
-                      <div style={{ color: '#6ee7b7', fontSize: '0.875rem', marginTop: '0.25rem' }}>
-                        Awaiting admin approval
-                      </div>
-                      <a 
-                        href={`https://sepolia.etherscan.io/tx/${validationResult.txHash}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: '#3b82f6', fontSize: '0.75rem', marginTop: '0.5rem', display: 'block' }}
-                      >
-                        View on Etherscan →
-                      </a>
-                    </div>
-                  )}
-                </div>
-                <button 
-                  onClick={() => {
-                    discard();
-                    setValidationResult(null);
-                  }}
-                  className="new-run-button"
-                >
-                  <div className="button-icon">+</div>
-                  <div className="button-text">NEW VALIDATION</div>
-                </button>
-              </div>
-            )}
-          </div>
-        </>
+      {state === 'running' && (
+        <button onClick={handleDebugClick} style={styles.debugButton}>
+          +100m TEST
+        </button>
       )}
 
-      {activeTab === 'staking' && <StakingDashboard />}
-      
-      {activeTab === 'leaderboards' && <LeaderboardsDashboard />}
-
-      {activeTab === 'tutorial' && (
-        <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
-          <h2 style={{ color: '#10b981', marginBottom: '2rem' }}>Protocol Documentation</h2>
-          
-          <div style={{ 
-            background: 'rgba(59, 130, 246, 0.1)',
-            padding: '1.5rem',
-            borderRadius: '1rem',
-            marginBottom: '2rem',
-            border: '1px solid rgba(59, 130, 246, 0.2)'
-          }}>
-            <h3 style={{ color: '#60a5fa', margin: '0 0 1rem 0' }}>Blockchain Integration</h3>
-            <p style={{ color: '#bfdbfe', fontSize: '1rem' }}>
-              Contract: {CONTRACT_ADDRESS.slice(0, 6)}...{CONTRACT_ADDRESS.slice(-4)}
-            </p>
-            <p style={{ color: '#bfdbfe', fontSize: '1rem', marginTop: '0.5rem' }}>
-              Network: Sepolia Testnet
-            </p>
-            <p style={{ color: '#bfdbfe', fontSize: '1rem', marginTop: '0.5rem' }}>
-              Status: {isConnected ? '🟢 Connected' : '🔴 Not Connected'}
-            </p>
-          </div>
-
-          <div style={{ marginBottom: '2rem' }}>
-            <h3 style={{ color: '#10b981', marginBottom: '1rem' }}>How It Works</h3>
-            
-            <div style={{ 
-              padding: '1rem',
-              background: 'rgba(255, 255, 255, 0.03)',
-              borderRadius: '0.75rem',
-              marginBottom: '1rem'
-            }}>
-              <h4 style={{ color: '#f97316', margin: '0 0 0.5rem 0' }}>1. Connect Wallet</h4>
-              <p style={{ color: '#d1d5db', margin: 0 }}>
-                Use MetaMask mobile browser or WalletConnect
-              </p>
-            </div>
-
-            <div style={{ 
-              padding: '1rem',
-              background: 'rgba(255, 255, 255, 0.03)',
-              borderRadius: '0.75rem',
-              marginBottom: '1rem'
-            }}>
-              <h4 style={{ color: '#f97316', margin: '0 0 0.5rem 0' }}>2. Start Validation</h4>
-              <p style={{ color: '#d1d5db', margin: 0 }}>
-                GPS tracks movement. Min 100m. Use +100m button for testing.
-              </p>
-            </div>
-
-            <div style={{ 
-              padding: '1rem',
-              background: 'rgba(255, 255, 255, 0.03)',
-              borderRadius: '0.75rem'
-            }}>
-              <h4 style={{ color: '#f97316', margin: '0 0 0.5rem 0' }}>3. Earn FYTS</h4>
-              <p style={{ color: '#d1d5db', margin: 0 }}>
-                Base: 0.1 FYTS + 0.0001 FYTS/meter. Max 10 FYTS.
-              </p>
-            </div>
-          </div>
-
-          <div style={{
-            background: 'rgba(239, 68, 68, 0.1)',
-            padding: '1rem',
-            borderRadius: '0.75rem',
-            border: '1px solid rgba(239, 68, 68, 0.2)'
-          }}>
-            <p style={{ color: '#fca5a5', margin: 0, fontWeight: 600 }}>
-              ⚠️ Testnet Only - No real value
-            </p>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'contact' && (
-        <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
-          <h2 style={{ color: '#10b981', marginBottom: '2rem' }}>Protocol Support</h2>
-          
-          {!contactSubmitted ? (
-            <form onSubmit={handleContactSubmit} style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              padding: '2rem',
-              borderRadius: '1rem',
-              border: '1px solid rgba(255, 255, 255, 0.1)'
-            }}>
-              <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{ 
-                  display: 'block', 
-                  color: '#d1d5db', 
-                  marginBottom: '0.5rem',
-                  fontSize: '0.875rem',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
-                }}>
-                  Username
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={contactForm.username}
-                  onChange={(e) => setContactForm({...contactForm, username: e.target.value})}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    background: 'rgba(0, 0, 0, 0.3)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    borderRadius: '0.5rem',
-                    color: 'white',
-                    fontSize: '1rem'
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{ 
-                  display: 'block', 
-                  color: '#d1d5db', 
-                  marginBottom: '0.5rem',
-                  fontSize: '0.875rem',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
-                }}>
-                  Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={contactForm.firstName}
-                  onChange={(e) => setContactForm({...contactForm, firstName: e.target.value})}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    background: 'rgba(0, 0, 0, 0.3)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    borderRadius: '0.5rem',
-                    color: 'white',
-                    fontSize: '1rem'
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{ 
-                  display: 'block', 
-                  color: '#d1d5db', 
-                  marginBottom: '0.5rem',
-                  fontSize: '0.875rem',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
-                }}>
-                  Email
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={contactForm.email}
-                  onChange={(e) => setContactForm({...contactForm, email: e.target.value})}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    background: 'rgba(0, 0, 0, 0.3)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    borderRadius: '0.5rem',
-                    color: 'white',
-                    fontSize: '1rem'
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{ 
-                  display: 'block', 
-                  color: '#d1d5db', 
-                  marginBottom: '0.5rem',
-                  fontSize: '0.875rem',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
-                }}>
-                  Message
-                </label>
-                <textarea
-                  required
-                  rows={5}
-                  value={contactForm.details}
-                  onChange={(e) => setContactForm({...contactForm, details: e.target.value})}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    background: 'rgba(0, 0, 0, 0.3)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    borderRadius: '0.5rem',
-                    color: 'white',
-                    fontSize: '1rem',
-                    resize: 'vertical'
-                  }}
-                />
-              </div>
-
-              <button
-                type="submit"
-                style={{
-                  width: '100%',
-                  padding: '1rem',
-                  background: 'linear-gradient(135deg, #10b981, #059669)',
-                  border: 'none',
-                  borderRadius: '0.5rem',
-                  color: 'white',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
-                }}
-              >
-                Submit
-              </button>
-            </form>
-          ) : (
-            <div style={{
-              background: 'rgba(16, 185, 129, 0.1)',
-              padding: '2rem',
-              borderRadius: '1rem',
-              border: '1px solid rgba(16, 185, 129, 0.2)',
-              textAlign: 'center'
-            }}>
-              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>✓</div>
-              <h3 style={{ color: '#10b981' }}>Message Sent</h3>
-              <p style={{ color: '#6ee7b7' }}>We'll respond within 24-48 hours</p>
-            </div>
-          )}
-        </div>
-      )}
+      <style>{`
+        @keyframes pulse {
+          0% { transform: scale(1); }
+          50% { transform: scale(1.05); }
+          100% { transform: scale(1); }
+        }
+      `}</style>
     </div>
   );
 }
