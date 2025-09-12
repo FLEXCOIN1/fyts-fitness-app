@@ -13,14 +13,6 @@ import LegalDisclaimer from './components/Legaldisclaimer';
 import StakingDashboard from './components/StakingDashboard';
 import LeaderboardsDashboard from './components/LeaderboardsDashboard';
 
-// Declare window.ethereum type
-declare global {
-  interface Window {
-    ethereum?: any;
-    web3?: any;
-  }
-}
-
 // Contract configuration
 const CONTRACT_ADDRESS = '0x2955128a2ef2c7038381a5F56bcC21A91889595B';
 const SEPOLIA_CHAIN_ID = 11155111;
@@ -103,9 +95,8 @@ function AppContent() {
   const fetchContractBalance = async () => {
     if (!address) return;
     
-    // Check for Web3 provider
-    const provider = window.ethereum ? 
-      new ethers.providers.Web3Provider(window.ethereum) :
+    const provider = (window as any).ethereum ? 
+      new ethers.providers.Web3Provider((window as any).ethereum) :
       new ethers.providers.JsonRpcProvider('https://sepolia.infura.io/v3/YOUR_INFURA_KEY');
     
     try {
@@ -147,23 +138,19 @@ function AppContent() {
     console.log('Starting validation submission...');
     console.log('Distance:', distance, 'Duration:', duration);
     
-    // Check wallet connection
     if (!isConnected || !address) {
       alert('Please connect your wallet first');
       return;
     }
 
-    // Check minimum distance
     if (distance < 100) {
       alert(`Distance too short: ${distance.toFixed(2)}m. Minimum 100m required.`);
       return;
     }
 
-    // Check for Web3 provider (works on mobile)
-    if (!window.ethereum) {
-      // Try to use web3 if available
-      if (window.web3?.currentProvider) {
-        window.ethereum = window.web3.currentProvider;
+    if (!(window as any).ethereum) {
+      if ((window as any).web3?.currentProvider) {
+        (window as any).ethereum = (window as any).web3.currentProvider;
       } else {
         alert('No Web3 provider found. Please use:\n1. MetaMask mobile browser\n2. WalletConnect\n3. Coinbase Wallet');
         return;
@@ -175,9 +162,8 @@ function AppContent() {
     try {
       alert('Submitting validation to blockchain... This may take 30 seconds.');
       
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const provider = new ethers.providers.Web3Provider((window as any).ethereum);
       
-      // Check network
       const network = await provider.getNetwork();
       if (network.chainId !== SEPOLIA_CHAIN_ID) {
         alert(`Wrong network! Please switch to Sepolia Testnet.\nCurrent network: ${network.name || network.chainId}`);
@@ -188,7 +174,6 @@ function AppContent() {
       const signer = provider.getSigner();
       const contract = new ethers.Contract(CONTRACT_ADDRESS, FYTSContract.abi, signer);
       
-      // Check if approved validator
       try {
         const isApproved = await contract.approvedValidators(address);
         console.log('Is approved validator:', isApproved);
@@ -196,7 +181,6 @@ function AppContent() {
         console.log('Could not check approval status');
       }
       
-      // Submit validation
       const proofData = {
         distance: Math.floor(distance),
         duration: Math.floor(duration / 1000),
@@ -218,7 +202,6 @@ function AppContent() {
       
       alert('Validation submitted successfully! Admin approval required for token distribution.');
       
-      // Calculate reward
       const baseReward = 0.1;
       const distanceReward = (distance * 0.0001);
       const durationBonus = duration > 1800000 ? 0.5 : 0;
@@ -230,13 +213,11 @@ function AppContent() {
         txHash: receipt.transactionHash
       });
       
-      // Refresh balance
       await fetchContractBalance();
       
     } catch (error: any) {
       console.error('Error:', error);
       
-      // User-friendly error messages
       if (error.code === 4001 || error.message?.includes('rejected')) {
         alert('Transaction cancelled');
       } else if (error.message?.includes('Daily limit')) {
@@ -780,3 +761,6 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <AppContent />
       </QueryClientProvider>
+    </WagmiProvider>
+  );
+}
