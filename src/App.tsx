@@ -1,122 +1,43 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-// Type declarations
-interface GPSPosition {
-  lat: number;
-  lon: number;
-  time: number;
-}
-
-declare global {
-  interface Window {
-    ethereum?: any;
-  }
-}
-
-const CONTRACT_ADDRESS = '0x2955128a2ef2c7038381a5F56bcC21A91889595B';
-const SEPOLIA_CHAIN_ID = 11155111;
-const SEPOLIA_CHAIN_HEX = '0xaa36a7';
-
-// CONVERSION RATE: Base reward is 10 FYTS + (distance/100) FYTS
-// So approximately: 100m = 11 FYTS, 1000m = 20 FYTS, 5000m = 60 FYTS
-const calculateExpectedFYTS = (distanceMeters: number): number => {
-  const baseReward = 10;
-  const distanceReward = distanceMeters / 100;
-  return baseReward + distanceReward;
-};
-
-// Helper function to convert string to hex for encoding
-const stringToHex = (str: string): string => {
-  let hex = '';
-  for (let i = 0; i < str.length; i++) {
-    hex += str.charCodeAt(i).toString(16).padStart(2, '0');
-  }
-  return hex;
-};
+// CHANGE THIS TO YOUR NEW CONTRACT ADDRESS AFTER DEPLOYMENT
+const CONTRACT_ADDRESS = '';
 
 export default function App() {
-  // GPS & Run State
-  const [runState, setRunState] = useState<'idle' | 'running' | 'stopped'>('idle');
-  const [distance, setDistance] = useState(0);
-  const [elapsedTime, setElapsedTime] = useState(0);
-  const [currentSpeed, setCurrentSpeed] = useState(0);
-  const [gpsStatus, setGpsStatus] = useState('Ready');
-  const [gpsAccuracy, setGpsAccuracy] = useState(0);
-  
-  // Wallet State
-  const [account, setAccount] = useState<string | null>(null);
+  // Core state
+  const [account, setAccount] = useState(null);
   const [balance, setBalance] = useState('0');
-  const [isValidator, setIsValidator] = useState(false);
-  const [chainId, setChainId] = useState<number | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [txHash, setTxHash] = useState<string | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
+  const [distance, setDistance] = useState(0);
+  const [time, setTime] = useState(0);
+  const [gpsStatus, setGpsStatus] = useState('Ready');
+  const [lastPosition, setLastPosition] = useState(null);
   
-  // Refs for tracking
-  const watchIdRef = useRef<number | null>(null);
-  const lastPositionRef = useRef<GPSPosition | null>(null);
-  const startTimeRef = useRef<number | null>(null);
-  const timerRef = useRef<number | null>(null);
-  const positionCount = useRef(0);
+  // Refs
+  const watchId = useRef(null);
+  const timer = useRef(null);
+  const startTime = useRef(null);
 
-  // Web3 Helper Functions
-  const toHex = (num: number): string => '0x' + num.toString(16);
-  
-  const fromWei = (wei: string): string => {
-    const weiString = wei.toString();
-    if (weiString === '0x0' || weiString === '0') return '0.0';
-    
-    // Remove 0x prefix if present
-    const cleanWei = weiString.startsWith('0x') ? weiString.slice(2) : weiString;
-    const weiNum = BigInt('0x' + cleanWei);
-    
-    // Convert to string and pad for decimal conversion
-    const weiStr = weiNum.toString();
-    const paddedWei = weiStr.padStart(19, '0');
-    const wholePart = paddedWei.slice(0, -18) || '0';
-    const decimalPart = paddedWei.slice(-18);
-    
-    // Format with 4 decimal places
-    const formatted = wholePart + '.' + decimalPart.slice(0, 4);
-    return formatted;
-  };
-
-  // Connect Wallet
-  const connectWallet = async (): Promise<void> => {
+  // Connect wallet
+  const connectWallet = async () => {
     if (!window.ethereum) {
       alert('Please install MetaMask!');
       return;
     }
     
     try {
-      // Request accounts
-      const accounts = await window.ethereum.request({ 
-        method: 'eth_requestAccounts' 
-      });
-      
-      // Get chain ID
-      const chain = await window.ethereum.request({
-        method: 'eth_chainId'
-      });
-      
+      const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
       setAccount(accounts[0]);
-      setChainId(parseInt(chain, 16));
-      
-      // Get balance
       await updateBalance(accounts[0]);
-      
-      // Check validator status
-      await checkValidatorStatus(accounts[0]);
-      
     } catch (error) {
-      console.error('Connection error:', error);
       alert('Failed to connect wallet');
     }
   };
 
   // Update balance
-  const updateBalance = async (address: string): Promise<void> => {
+  const updateBalance = async (address) => {
     try {
-      const balanceCall = await window.ethereum.request({
+      const result = await ethereum.request({
         method: 'eth_call',
         params: [{
           to: CONTRACT_ADDRESS,
@@ -124,46 +45,17 @@ export default function App() {
         }, 'latest']
       });
       
-      setBalance(fromWei(balanceCall));
+      // Convert hex to decimal and format
+      const wei = parseInt(result, 16);
+      const fyts = wei / (10 ** 18);
+      setBalance(fyts.toFixed(2));
     } catch (error) {
       console.error('Balance fetch error:', error);
     }
   };
 
-  // Check validator status
-  const checkValidatorStatus = async (address: string): Promise<void> => {
-    try {
-      const validatorCall = await window.ethereum.request({
-        method: 'eth_call',
-        params: [{
-          to: CONTRACT_ADDRESS,
-          data: '0x3926f791' + address.slice(2).padStart(64, '0')
-        }, 'latest']
-      });
-      
-      const isApproved = validatorCall !== '0x0000000000000000000000000000000000000000000000000000000000000000';
-      setIsValidator(isApproved);
-    } catch (error) {
-      console.error('Validator check error:', error);
-    }
-  };
-
-  // Switch to Sepolia
-  const switchToSepolia = async (): Promise<void> => {
-    try {
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: SEPOLIA_CHAIN_HEX }],
-      });
-      setChainId(SEPOLIA_CHAIN_ID);
-    } catch (error) {
-      console.error('Network switch error:', error);
-      alert('Please switch to Sepolia network manually in MetaMask');
-    }
-  };
-
-  // Calculate distance between GPS points
-  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  // Calculate distance between two GPS points (in meters)
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371000; // Earth radius in meters
     const φ1 = lat1 * Math.PI / 180;
     const φ2 = lat2 * Math.PI / 180;
@@ -178,662 +70,339 @@ export default function App() {
     return R * c;
   };
 
-  // Handle GPS position updates
-  const handleGPSUpdate = useCallback((position: GeolocationPosition) => {
-    const { latitude, longitude, accuracy, speed } = position.coords;
-    positionCount.current++;
+  // Start run
+  const startRun = () => {
+    setIsRunning(true);
+    setDistance(0);
+    setTime(0);
+    setLastPosition(null);
+    startTime.current = Date.now();
     
-    setGpsAccuracy(accuracy);
+    // Start timer
+    timer.current = setInterval(() => {
+      setTime(Math.floor((Date.now() - startTime.current) / 1000));
+    }, 1000);
     
-    // Update GPS status
-    if (accuracy <= 10) {
-      setGpsStatus(`High Accuracy (±${accuracy.toFixed(0)}m)`);
-    } else if (accuracy <= 30) {
-      setGpsStatus(`Good GPS (±${accuracy.toFixed(0)}m)`);
-    } else if (accuracy <= 50) {
-      setGpsStatus(`Fair GPS (±${accuracy.toFixed(0)}m)`);
-    } else {
-      setGpsStatus(`Poor GPS (±${accuracy.toFixed(0)}m)`);
-    }
-    
-    // Use device speed if available
-    if (speed !== null && speed > 0) {
-      setCurrentSpeed(speed * 3.6); // Convert m/s to km/h
-    }
-    
-    if (lastPositionRef.current) {
-      const dist = calculateDistance(
-        lastPositionRef.current.lat,
-        lastPositionRef.current.lon,
-        latitude,
-        longitude
+    // Start GPS tracking
+    if (navigator.geolocation) {
+      setGpsStatus('Acquiring GPS...');
+      
+      // Get initial position
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setLastPosition({
+            lat: position.coords.latitude,
+            lon: position.coords.longitude
+          });
+          setGpsStatus('GPS Active');
+        },
+        (error) => {
+          setGpsStatus('GPS Error - Use manual buttons');
+          console.error('GPS Error:', error);
+        },
+        { enableHighAccuracy: true }
       );
       
-      // More lenient movement detection for walking/running
-      // Accept movement if distance > 2 meters and accuracy is reasonable
-      if (dist > 2 && dist < 200 && accuracy < 50) {
-        setDistance(prev => {
-          const newDistance = prev + dist;
-          console.log(`Distance update: +${dist.toFixed(2)}m, Total: ${newDistance.toFixed(2)}m`);
-          return newDistance;
-        });
-        
-        // Calculate speed if device doesn't provide it
-        if (speed === null || speed === 0) {
-          const timeDiff = (Date.now() - lastPositionRef.current.time) / 1000;
-          if (timeDiff > 0) {
-            const calculatedSpeed = (dist / timeDiff) * 3.6; // km/h
-            setCurrentSpeed(calculatedSpeed);
+      // Watch position
+      watchId.current = navigator.geolocation.watchPosition(
+        (position) => {
+          const newPos = {
+            lat: position.coords.latitude,
+            lon: position.coords.longitude
+          };
+          
+          if (lastPosition) {
+            const dist = calculateDistance(
+              lastPosition.lat, lastPosition.lon,
+              newPos.lat, newPos.lon
+            );
+            
+            // Only add distance if movement is reasonable (1-100m)
+            if (dist > 1 && dist < 100) {
+              setDistance(prev => prev + dist);
+            }
           }
+          
+          setLastPosition(newPos);
+          setGpsStatus(`GPS Active (±${Math.round(position.coords.accuracy)}m)`);
+        },
+        (error) => {
+          setGpsStatus('GPS Lost - Use manual');
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 5000
         }
-      }
+      );
+    } else {
+      setGpsStatus('No GPS - Use manual buttons');
     }
-    
-    lastPositionRef.current = {
-      lat: latitude,
-      lon: longitude,
-      time: Date.now()
-    };
-  }, []);
-
-  // Start GPS tracking
-  const startGPSTracking = (): void => {
-    if (!navigator.geolocation) {
-      alert('GPS not supported on this device!');
-      return;
-    }
-    
-    setGpsStatus('Starting GPS...');
-    positionCount.current = 0;
-    
-    // Get initial position
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        handleGPSUpdate(position);
-        console.log('Initial position acquired');
-      },
-      (error) => {
-        console.error('Initial position error:', error);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 5000,
-        maximumAge: 0
-      }
-    );
-    
-    // Start watching position
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      handleGPSUpdate,
-      (error) => {
-        console.error('GPS Error:', error);
-        if (error.code === 1) {
-          setGpsStatus('Location denied');
-          alert('Location permission denied. Please enable in settings and refresh.');
-        } else if (error.code === 2) {
-          setGpsStatus('GPS unavailable');
-        } else if (error.code === 3) {
-          setGpsStatus('GPS timeout');
-        }
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 5000,
-        maximumAge: 0
-      }
-    );
-  };
-
-  // Start run
-  const startRun = (): void => {
-    setRunState('running');
-    setDistance(0);
-    setElapsedTime(0);
-    setCurrentSpeed(0);
-    startTimeRef.current = Date.now();
-    lastPositionRef.current = null;
-    
-    startGPSTracking();
-    
-    // Timer
-    timerRef.current = window.setInterval(() => {
-      if (startTimeRef.current) {
-        setElapsedTime(Math.floor((Date.now() - startTimeRef.current) / 1000));
-      }
-    }, 1000);
   };
 
   // Stop run
-  const stopRun = (): void => {
-    setRunState('stopped');
+  const stopRun = () => {
+    setIsRunning(false);
     
     // Clear GPS
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
+    if (watchId.current) {
+      navigator.geolocation.clearWatch(watchId.current);
+      watchId.current = null;
     }
     
     // Clear timer
-    if (timerRef.current !== null) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
+    if (timer.current) {
+      clearInterval(timer.current);
+      timer.current = null;
     }
     
-    console.log(`Run ended. Distance: ${distance.toFixed(2)}m, GPS updates: ${positionCount.current}`);
     setGpsStatus('Stopped');
   };
 
-  // Submit to blockchain
-  const submitToBlockchain = async (): Promise<void> => {
+  // Submit validation
+  const submitValidation = async () => {
     if (!account) {
       alert('Please connect wallet first!');
       return;
     }
     
-    if (chainId !== SEPOLIA_CHAIN_ID) {
-      alert('Please switch to Sepolia network!');
-      await switchToSepolia();
-      return;
-    }
-    
-    if (!isValidator && distance < 100) {
-      alert(`Since you're not an approved validator, this is a TEST submission.\nDistance: ${distance.toFixed(0)}m\nNote: Tokens won't be minted until admin approval.`);
-    }
-    
     if (distance < 10) {
-      alert(`Distance too short! Minimum 10m required. You have ${distance.toFixed(0)}m`);
+      alert('Minimum distance is 10 meters');
       return;
     }
-    
-    setIsSubmitting(true);
     
     try {
       const distanceInt = Math.floor(distance);
-      const durationInt = elapsedTime;
-      
-      // Calculate expected FYTS
-      const expectedFYTS = calculateExpectedFYTS(distanceInt);
-      
-      // Create proof data
-      const proofData = `data:${JSON.stringify({
+      const data = JSON.stringify({
         distance: distanceInt,
-        duration: durationInt,
-        timestamp: Date.now(),
-        gpsUpdates: positionCount.current,
-        accuracy: gpsAccuracy
-      })}`;
+        time: time,
+        timestamp: Date.now()
+      });
       
-      // Encode function call for submitValidation
-      const functionSig = '0xf09cc9b3'; // submitValidation signature
+      // Encode function call
+      const functionSig = '0xf09cc9b3';
+      const encodedData = functionSig +
+        distanceInt.toString(16).padStart(64, '0') +
+        time.toString(16).padStart(64, '0') +
+        '0000000000000000000000000000000000000000000000000000000000000060' +
+        (data.length).toString(16).padStart(64, '0') +
+        Buffer.from(data).toString('hex').padEnd(Math.ceil(data.length / 32) * 64, '0');
       
-      // Encode the parameters
-      const proofDataHex = stringToHex(proofData);
-      const data = functionSig + 
-                  distanceInt.toString(16).padStart(64, '0') +
-                  durationInt.toString(16).padStart(64, '0') +
-                  '0000000000000000000000000000000000000000000000000000000000000060' + // offset for string
-                  Math.floor(proofData.length / 2).toString(16).padStart(64, '0') +
-                  proofDataHex.padEnd(Math.ceil(proofData.length / 32) * 64, '0');
-      
-      const tx = await window.ethereum.request({
+      const tx = await ethereum.request({
         method: 'eth_sendTransaction',
         params: [{
           from: account,
           to: CONTRACT_ADDRESS,
-          gas: toHex(300000),
-          data: data
+          data: encodedData,
+          gas: '0x30000'
         }]
       });
       
-      setTxHash(tx);
-      alert(`Transaction submitted!\n\nDistance: ${distanceInt}m\nExpected FYTS: ~${expectedFYTS.toFixed(2)}\nTx Hash: ${tx.slice(0, 10)}...${tx.slice(-8)}\n\nWaiting for confirmation...`);
+      alert(`Validation submitted!\nTx: ${tx.slice(0,10)}...\nDistance: ${distanceInt}m\nReward: ~${10 + distanceInt/100} FYTS\n\nTokens will be distributed after admin approval.`);
       
-      // Wait for transaction receipt
-      let receipt = null;
-      let attempts = 0;
-      while (!receipt && attempts < 30) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        try {
-          receipt = await window.ethereum.request({
-            method: 'eth_getTransactionReceipt',
-            params: [tx]
-          });
-        } catch (e) {
-          console.log('Waiting for receipt...');
-        }
-        attempts++;
-      }
+      // Reset
+      setDistance(0);
+      setTime(0);
       
-      if (receipt && receipt.status === '0x1') {
-        alert(`SUCCESS!\n\nValidation submitted to blockchain!\nDistance: ${distanceInt}m\nExpected reward: ~${expectedFYTS.toFixed(2)} FYTS\n\n${isValidator ? 'Tokens will be minted after admin approval.' : 'TEST MODE: Admin approval required for token minting.'}`);
-        
-        // Update balance
-        await updateBalance(account);
-      } else if (receipt && receipt.status === '0x0') {
-        alert('Transaction failed! Check if you have enough ETH for gas.');
-      }
-      
-    } catch (error: any) {
-      console.error('Submit error:', error);
-      if (error.code === 4001) {
-        alert('Transaction cancelled');
-      } else if (error.message?.includes('insufficient funds')) {
-        alert('Insufficient ETH for gas! Get free Sepolia ETH from:\n\n• sepoliafaucet.com\n• faucet.sepolia.dev\n• sepolia-faucet.pk910.de');
-      } else {
-        alert(`Error: ${error.message?.substring(0, 100) || 'Transaction failed'}`);
-      }
+    } catch (error) {
+      alert('Submission failed: ' + error.message);
     }
-    
-    setIsSubmitting(false);
   };
 
-  // Format time
-  const formatTime = (seconds: number): string => {
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
+  // Format time display
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    
-    if (hrs > 0) {
-      return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    }
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Calculate pace
-  const calculatePace = (): string => {
-    if (distance === 0) return '--:--';
-    const kmDistance = distance / 1000;
-    if (kmDistance === 0) return '--:--';
-    const minutes = elapsedTime / 60;
-    const pace = minutes / kmDistance;
-    if (!isFinite(pace)) return '--:--';
-    const paceMin = Math.floor(pace);
-    const paceSec = Math.floor((pace - paceMin) * 60);
-    return `${paceMin}:${paceSec.toString().padStart(2, '0')}`;
-  };
-
-  // Calculate expected FYTS for display
-  const expectedFYTS = calculateExpectedFYTS(distance);
-
-  // Auto-refresh balance when account changes
+  // Auto-refresh balance
   useEffect(() => {
     if (account) {
       const interval = setInterval(() => {
         updateBalance(account);
-      }, 10000); // Every 10 seconds
-      
+      }, 10000);
       return () => clearInterval(interval);
     }
   }, [account]);
-
-  // Listen for account changes
-  useEffect(() => {
-    if (window.ethereum) {
-      window.ethereum.on('accountsChanged', (accounts: string[]) => {
-        if (accounts.length > 0) {
-          setAccount(accounts[0]);
-          updateBalance(accounts[0]);
-          checkValidatorStatus(accounts[0]);
-        } else {
-          setAccount(null);
-        }
-      });
-      
-      window.ethereum.on('chainChanged', (chainId: string) => {
-        setChainId(parseInt(chainId, 16));
-      });
-    }
-  }, []);
 
   return (
     <div style={{
       minHeight: '100vh',
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: '10px',
-      fontFamily: 'system-ui, -apple-system, sans-serif'
+      padding: '20px',
+      fontFamily: 'system-ui, sans-serif'
     }}>
       {/* Header */}
       <div style={{
         background: 'white',
         borderRadius: '20px',
-        padding: '15px',
-        marginBottom: '15px',
-        boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+        padding: '20px',
+        marginBottom: '20px',
+        textAlign: 'center'
       }}>
-        <h1 style={{
-          fontSize: '1.8rem',
-          margin: '0 0 10px 0',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          fontWeight: 'bold'
-        }}>
-          FYTS FITNESS TRACKER
+        <h1 style={{ margin: '0 0 20px 0', color: '#333' }}>
+          FYTS FITNESS REWARDS
         </h1>
         
         {account ? (
           <div>
-            <div style={{ fontSize: '0.9rem', marginBottom: '5px', color: '#666' }}>
-              {account.slice(0, 6)}...{account.slice(-4)}
+            <div style={{ marginBottom: '10px', color: '#666' }}>
+              {account.slice(0,6)}...{account.slice(-4)}
             </div>
-            <div style={{ 
-              fontWeight: 'bold', 
-              fontSize: '1.3rem',
-              color: '#333'
-            }}>
-              {parseFloat(balance).toFixed(4)} FYTS
+            <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#667eea' }}>
+              {balance} FYTS
             </div>
-            {!isValidator && (
-              <div style={{ 
-                color: '#ff9800', 
-                fontSize: '0.8rem', 
-                marginTop: '5px',
-                padding: '5px',
-                background: '#fff3e0',
-                borderRadius: '5px'
-              }}>
-                Test Mode (not approved validator)
-              </div>
-            )}
-            {chainId && chainId !== SEPOLIA_CHAIN_ID && (
-              <button 
-                onClick={switchToSepolia}
-                style={{ 
-                  marginTop: '5px',
-                  padding: '5px 10px',
-                  background: '#ff5252',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '5px',
-                  fontSize: '0.8rem',
-                  cursor: 'pointer'
-                }}
-              >
-                Switch to Sepolia
-              </button>
-            )}
+            <div style={{ marginTop: '10px', fontSize: '12px', color: '#999' }}>
+              Fitness rewards token - Not a financial investment
+            </div>
           </div>
         ) : (
-          <button 
-            onClick={connectWallet}
-            style={{
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              border: 'none',
-              padding: '12px 24px',
-              borderRadius: '10px',
-              fontSize: '1rem',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              boxShadow: '0 4px 15px rgba(102, 126, 234, 0.4)'
-            }}
-          >
-            Connect MetaMask
+          <button onClick={connectWallet} style={{
+            padding: '12px 24px',
+            background: '#667eea',
+            color: 'white',
+            border: 'none',
+            borderRadius: '10px',
+            fontSize: '16px',
+            cursor: 'pointer'
+          }}>
+            Connect Wallet
           </button>
         )}
       </div>
 
-      {/* Main Display */}
+      {/* Main tracking area */}
       <div style={{
         background: 'white',
         borderRadius: '20px',
         padding: '20px',
-        marginBottom: '15px',
-        boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+        marginBottom: '20px'
       }}>
-        {/* Distance Display */}
+        {/* Distance display */}
         <div style={{
-          fontSize: '4rem',
+          fontSize: '48px',
           fontWeight: 'bold',
           textAlign: 'center',
           color: '#333',
-          lineHeight: 1
+          marginBottom: '10px'
         }}>
           {distance.toFixed(1)}m
         </div>
         
-        {/* FYTS Conversion Display */}
+        {/* Time display */}
         <div style={{
+          fontSize: '24px',
           textAlign: 'center',
-          fontSize: '1.8rem',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          fontWeight: 'bold',
+          color: '#666',
           marginBottom: '20px'
         }}>
-          ≈ {expectedFYTS.toFixed(2)} FYTS
+          {formatTime(time)}
         </div>
         
-        <div style={{
-          textAlign: 'center',
-          fontSize: '0.9rem',
-          color: '#999',
-          marginBottom: '15px'
-        }}>
-          Base: 10 FYTS + {(distance/100).toFixed(2)} distance bonus
-        </div>
-
-        {/* Stats Grid */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr 1fr',
-          gap: '10px',
-          marginBottom: '20px'
-        }}>
-          <div style={{
-            background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
-            padding: '15px 10px',
-            borderRadius: '15px',
-            textAlign: 'center'
-          }}>
-            <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#333' }}>
-              {formatTime(elapsedTime)}
-            </div>
-            <div style={{ fontSize: '0.8rem', color: '#666' }}>Time</div>
-          </div>
-          
-          <div style={{
-            background: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
-            padding: '15px 10px',
-            borderRadius: '15px',
-            textAlign: 'center'
-          }}>
-            <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#333' }}>
-              {currentSpeed.toFixed(1)}
-            </div>
-            <div style={{ fontSize: '0.8rem', color: '#666' }}>km/h</div>
-          </div>
-          
-          <div style={{
-            background: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
-            padding: '15px 10px',
-            borderRadius: '15px',
-            textAlign: 'center'
-          }}>
-            <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#333' }}>
-              {calculatePace()}
-            </div>
-            <div style={{ fontSize: '0.8rem', color: '#666' }}>min/km</div>
-          </div>
-        </div>
-
         {/* GPS Status */}
         <div style={{
           textAlign: 'center',
-          padding: '12px',
-          background: gpsStatus.includes('High') ? 'linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%)' :
-                      gpsStatus.includes('Good') ? 'linear-gradient(135deg, #cfe2ff 0%, #b6d4fe 100%)' :
-                      gpsStatus.includes('Fair') ? 'linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%)' :
-                      'linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%)',
-          borderRadius: '12px',
-          marginBottom: '15px',
-          fontSize: '0.95rem',
-          fontWeight: '500'
+          padding: '10px',
+          background: gpsStatus.includes('Active') ? '#d4edda' : '#f8d7da',
+          borderRadius: '10px',
+          marginBottom: '20px'
         }}>
-          GPS: {gpsStatus}
+          {gpsStatus}
         </div>
-
-        {/* Control Buttons */}
-        {runState === 'idle' && (
-          <button 
-            onClick={startRun}
-            style={{
-              width: '100%',
-              padding: '18px',
-              background: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '15px',
-              fontSize: '1.3rem',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              boxShadow: '0 10px 30px rgba(56, 239, 125, 0.3)',
-              transition: 'transform 0.2s',
-            }}
-            onMouseDown={e => e.currentTarget.style.transform = 'scale(0.98)'}
-            onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
-          >
+        
+        {/* Controls */}
+        {!isRunning ? (
+          <button onClick={startRun} style={{
+            width: '100%',
+            padding: '20px',
+            background: '#28a745',
+            color: 'white',
+            border: 'none',
+            borderRadius: '10px',
+            fontSize: '20px',
+            fontWeight: 'bold',
+            cursor: 'pointer'
+          }}>
             START RUN
           </button>
-        )}
-
-        {runState === 'running' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-            <button 
-              onClick={stopRun}
-              style={{
-                padding: '18px',
-                background: 'linear-gradient(135deg, #fc4a1a 0%, #f7b733 100%)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '15px',
-                fontSize: '1.2rem',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                boxShadow: '0 10px 30px rgba(252, 74, 26, 0.3)'
-              }}
-            >
-              STOP
-            </button>
-            
-            {/* Debug button for testing */}
-            <button 
-              onClick={() => setDistance(prev => prev + 100)}
-              style={{
-                padding: '18px',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '15px',
-                fontSize: '1.2rem',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                boxShadow: '0 10px 30px rgba(102, 126, 234, 0.3)'
-              }}
-            >
-              +100m
-            </button>
-          </div>
-        )}
-
-        {runState === 'stopped' && (
+        ) : (
           <div>
-            <div style={{
-              background: 'linear-gradient(135deg, #667eea20 0%, #764ba220 100%)',
+            <button onClick={stopRun} style={{
+              width: '100%',
               padding: '20px',
-              borderRadius: '15px',
-              marginBottom: '15px',
-              textAlign: 'center'
+              background: '#dc3545',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              fontSize: '20px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              marginBottom: '10px'
             }}>
-              <div style={{ fontSize: '1.3rem', fontWeight: 'bold', marginBottom: '10px', color: '#333' }}>
-                Run Complete!
-              </div>
-              <div style={{ fontSize: '1.1rem', marginBottom: '5px' }}>
-                Distance: <strong>{distance.toFixed(1)}m</strong>
-              </div>
-              <div style={{ fontSize: '1.1rem', marginBottom: '5px' }}>
-                Time: <strong>{formatTime(elapsedTime)}</strong>
-              </div>
-              <div style={{ 
-                fontSize: '1.3rem', 
-                marginTop: '10px',
-                padding: '10px',
-                background: 'white',
-                borderRadius: '10px',
-                color: '#667eea',
-                fontWeight: 'bold'
-              }}>
-                Potential Reward: {expectedFYTS.toFixed(2)} FYTS
-              </div>
-              {txHash && (
-                <div style={{ 
-                  marginTop: '10px',
-                  fontSize: '0.8rem',
-                  color: '#666'
-                }}>
-                  Tx: {txHash.slice(0, 10)}...{txHash.slice(-8)}
-                </div>
-              )}
-            </div>
+              STOP RUN
+            </button>
             
+            {/* Manual distance buttons for testing */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <button 
-                onClick={submitToBlockchain}
-                disabled={isSubmitting}
-                style={{
-                  padding: '15px',
-                  background: isSubmitting ? '#ccc' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '12px',
-                  fontWeight: 'bold',
-                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                  fontSize: '1.1rem',
-                  boxShadow: '0 10px 30px rgba(102, 126, 234, 0.3)'
-                }}
-              >
-                {isSubmitting ? 'SUBMITTING...' : 'CLAIM FYTS'}
+              <button onClick={() => setDistance(d => d + 10)} style={{
+                padding: '15px',
+                background: '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '10px',
+                cursor: 'pointer'
+              }}>
+                +10m Manual
               </button>
-              
-              <button 
-                onClick={() => {
-                  setRunState('idle');
-                  setDistance(0);
-                  setElapsedTime(0);
-                  setTxHash(null);
-                }}
-                style={{
-                  padding: '15px',
-                  background: 'linear-gradient(135deg, #868f96 0%, #596164 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '12px',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  fontSize: '1.1rem'
-                }}
-              >
-                NEW RUN
+              <button onClick={() => setDistance(d => d + 100)} style={{
+                padding: '15px',
+                background: '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '10px',
+                cursor: 'pointer'
+              }}>
+                +100m Manual
               </button>
             </div>
           </div>
+        )}
+        
+        {/* Submit button (shows when stopped with distance) */}
+        {!isRunning && distance > 0 && (
+          <button onClick={submitValidation} style={{
+            width: '100%',
+            padding: '20px',
+            marginTop: '20px',
+            background: '#667eea',
+            color: 'white',
+            border: 'none',
+            borderRadius: '10px',
+            fontSize: '18px',
+            fontWeight: 'bold',
+            cursor: 'pointer'
+          }}>
+            SUBMIT FOR REWARDS ({(10 + distance/100).toFixed(1)} FYTS)
+          </button>
         )}
       </div>
 
-      {/* Info Panel */}
+      {/* Info */}
       <div style={{
         background: 'white',
-        borderRadius: '15px',
-        padding: '15px',
-        boxShadow: '0 5px 20px rgba(0,0,0,0.1)'
+        borderRadius: '20px',
+        padding: '20px',
+        fontSize: '14px',
+        color: '#666'
       }}>
-        <h3 style={{ margin: '0 0 10px 0', color: '#333' }}>Reward System</h3>
-        <div style={{ fontSize: '0.9rem', color: '#666', lineHeight: 1.6 }}>
-          <div>• Base reward: <strong>10 FYTS</strong></div>
-          <div>• Distance bonus: <strong>1 FYTS per 100m</strong></div>
-          <div>• Duration bonus: <strong>+5 FYTS</strong> (30+ min)</div>
-          <div>• GPS updates received: <strong>{positionCount.current}</strong></div>
+        <h3 style={{ margin: '0 0 10px 0', color: '#333' }}>How It Works</h3>
+        <div>1. Start a run to track your fitness activity</div>
+        <div>2. GPS will track distance (or use manual buttons)</div>
+        <div>3. Submit your activity for reward tokens</div>
+        <div>4. Receive FYTS tokens after admin verification</div>
+        <div style={{ marginTop: '10px', fontWeight: 'bold' }}>
+          Reward: 10 FYTS base + 1 FYTS per 100m
         </div>
       </div>
     </div>
